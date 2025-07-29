@@ -43,7 +43,7 @@ const NoteEditorModal = ({ isOpen, onClose, onSave, noteToEdit }) => {
             color,
         };
         onSave(savedNote);
-        onClose();
+        // We will now close the modal from the handleSaveNote function on success
     };
 
     return (
@@ -109,15 +109,19 @@ const NoteCard = ({ note, onEdit, onDelete }) => {
 
 // --- MAIN PAGE COMPONENT --- //
 export default function NotesPage() {
-    // UPDATED: Get new functions from context
     const { notes, saveData, deleteData, loading } = useAppContext();
     const [isEditorOpen, setEditorOpen] = useState(false);
     const [noteToEdit, setNoteToEdit] = useState(null);
 
-    // UPDATED: handleSaveNote now uses the generic saveData function
+    // UPDATED: handleSaveNote now has error handling
     const handleSaveNote = async (savedNote) => {
-        await saveData('notes', savedNote);
-        setEditorOpen(false);
+        try {
+            await saveData('notes', savedNote);
+            setEditorOpen(false); // Only close modal on success
+        } catch (error) {
+            console.error("Error saving note: ", error);
+            alert("Failed to save note. Please check the console for details.");
+        }
     };
 
     const handleOpenCreateModal = () => {
@@ -130,7 +134,6 @@ export default function NotesPage() {
         setEditorOpen(true);
     };
     
-    // UPDATED: handleDelete now uses the generic deleteData function
     const handleDelete = async (id) => {
         if (window.confirm("Are you sure you want to delete this note?")) {
             await deleteData('notes', id);
