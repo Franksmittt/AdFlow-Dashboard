@@ -6,7 +6,7 @@ import { useAppContext } from "../../context/AppContext";
 import Sidebar from "../../components/Sidebar";
 import CreativeChecklist from "../../components/campaigns/CreativeChecklist";
 import VisualManager from "../../components/campaigns/VisualManager";
-import CopyManager from "../../components/campaigns/CopyManager"; // Import the new component
+import CopyManager from "../../components/campaigns/CopyManager";
 
 // --- WIDGET COMPONENTS ---
 
@@ -25,7 +25,6 @@ const CampaignOverview = ({ campaign }) => (
   </div>
 );
 
-// Updated AdCreativeHub to include the CopyManager
 const AdCreativeHub = ({ campaign, onCampaignUpdate }) => (
   <div>
     <CreativeChecklist campaign={campaign} />
@@ -35,7 +34,6 @@ const AdCreativeHub = ({ campaign, onCampaignUpdate }) => (
 );
 
 const LinkedTasks = ({ campaignId, tasks }) => {
-    // We pass tasks as a prop to avoid calling useAppContext multiple times
     const campaignTasks = tasks.filter(task => task.campaign === campaignId);
 
     return (
@@ -64,19 +62,31 @@ const statusConfig = {
 
 // --- MAIN PAGE COMPONENT ---
 export default function CampaignDetailPage() {
-  const { campaigns, tasks, setCampaigns } = useAppContext();
+  // UPDATED: Get new functions from context
+  const { campaigns, tasks, saveData, loading } = useAppContext();
   const params = useParams();
   const router = useRouter(); 
 
   const campaign = campaigns.find((c) => c.id.toString() === params.id);
 
-  // --- SAVE HANDLER ---
-  const handleCampaignUpdate = (updatedData) => {
-    const updatedCampaigns = campaigns.map(c => 
-      c.id.toString() === params.id ? { ...c, ...updatedData } : c
-    );
-    setCampaigns(updatedCampaigns);
+  // UPDATED: handleCampaignUpdate now uses the generic saveData function
+  const handleCampaignUpdate = async (updatedData) => {
+    try {
+        const campaignToSave = { ...campaign, ...updatedData };
+        await saveData('campaigns', campaignToSave);
+    } catch (error) {
+        console.error("Error updating campaign:", error);
+        alert("Failed to update campaign. Please check the console for details.");
+    }
   };
+
+  if (loading) {
+    return (
+        <div className="flex h-screen bg-gray-950 text-white items-center justify-center">
+            Loading Campaign Details...
+        </div>
+    )
+  }
 
   if (!campaign) {
     return (

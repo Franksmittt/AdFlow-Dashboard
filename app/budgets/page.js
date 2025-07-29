@@ -1,17 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import Image from 'next/image';
 import Sidebar from '../components/Sidebar';
-import { useAppContext } from '../context/AppContext'; // 1. Import the context
+import { useAppContext } from '../context/AppContext';
 
 // --- ICONS --- //
 const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
 const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
 const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
 const Trash2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
-const Upload = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>;
-const Download = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
 const Store = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2V7"/></svg>;
 
 // --- CONFIG --- //
@@ -37,13 +34,17 @@ const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
 
     useEffect(() => {
         if (budgetToEdit) {
-            setName(budgetToEdit.name);
-            setBranch(budgetToEdit.branch);
-            setTotalBudget(budgetToEdit.totalBudget);
-            setDailyBudget(budgetToEdit.dailyBudget);
-            setSpent(budgetToEdit.spent);
+            setName(budgetToEdit.name || '');
+            setBranch(budgetToEdit.branch || BRANCHES[0]);
+            setTotalBudget(budgetToEdit.totalBudget || '');
+            setDailyBudget(budgetToEdit.dailyBudget || '');
+            setSpent(budgetToEdit.spent || 0);
         } else {
-            setName(''); setBranch(BRANCHES[0]); setTotalBudget(''); setDailyBudget(''); setSpent(0);
+            setName(''); 
+            setBranch(BRANCHES[0]); 
+            setTotalBudget(''); 
+            setDailyBudget(''); 
+            setSpent(0);
         }
     }, [budgetToEdit, isOpen]);
 
@@ -51,9 +52,18 @@ const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const savedBudget = { ...budgetToEdit, id: budgetToEdit ? budgetToEdit.id : Date.now(), name, branch, totalBudget: parseFloat(totalBudget), dailyBudget: parseFloat(dailyBudget), spent: parseFloat(spent), status: budgetToEdit?.status || 'Planning', startDate: budgetToEdit?.startDate || new Date().toISOString().slice(0,10) };
+        const savedBudget = { 
+            ...budgetToEdit, 
+            id: budgetToEdit ? budgetToEdit.id : undefined, 
+            name, 
+            branch, 
+            totalBudget: parseFloat(totalBudget) || 0, 
+            dailyBudget: parseFloat(dailyBudget) || 0, 
+            spent: parseFloat(spent) || 0, 
+            status: budgetToEdit?.status || 'Planning', 
+            startDate: budgetToEdit?.startDate || new Date().toISOString().slice(0,10) 
+        };
         onSave(savedBudget);
-        onClose();
     };
 
     return (
@@ -81,48 +91,34 @@ const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
 
 // --- MAIN PAGE COMPONENT --- //
 export default function BudgetsPage() {
-    // 2. Get data from the central context
-    const { budgets, setBudgets } = useAppContext();
+    // UPDATED: Get new functions from context
+    const { budgets, saveData, deleteData, loading } = useAppContext();
     
     const [isModalOpen, setModalOpen] = useState(false);
     const [budgetToEdit, setBudgetToEdit] = useState(null);
-    const fileInputRef = useRef(null);
 
-    // 3. Remove the local useState and useEffect for data management
-    // They are now handled by the AppContext
-
-    const handleSaveBudget = (savedBudget) => {
-        const budgetExists = budgets.some(b => b.id === savedBudget.id);
-        if (budgetExists) {
-            setBudgets(budgets.map(b => b.id === savedBudget.id ? savedBudget : b));
-        } else {
-            setBudgets(prev => [savedBudget, ...prev]);
+    // UPDATED: handleSaveBudget now uses the generic saveData function
+    const handleSaveBudget = async (savedBudget) => {
+        try {
+            await saveData('budgets', savedBudget);
+            setModalOpen(false);
+        } catch (error) {
+            console.error("Error saving budget:", error);
+            alert("Failed to save budget. Please check the console for details.");
         }
-        setModalOpen(false);
     };
     
     const handleAddClick = () => { setBudgetToEdit(null); setModalOpen(true); };
     const handleEditClick = (budget) => { setBudgetToEdit(budget); setModalOpen(true); };
-    const handleDeleteClick = (id) => { if(window.confirm('Are you sure you want to delete this budget entry?')) { setBudgets(budgets.filter(b => b.id !== id)); }};
-
-    const handleExport = () => {
-        const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(budgets, null, 2))}`;
-        const link = document.createElement("a");
-        link.href = jsonString;
-        link.download = "adflow-budgets.json";
-        link.click();
+    
+    // UPDATED: handleDeleteClick now uses the generic deleteData function
+    const handleDeleteClick = async (id) => { 
+        if(window.confirm('Are you sure you want to delete this budget entry?')) { 
+            await deleteData('budgets', id);
+        }
     };
 
-    const handleImport = (event) => {
-        const fileReader = new FileReader();
-        fileReader.readAsText(event.target.files[0], "UTF-8");
-        fileReader.onload = e => {
-            try { const imported = JSON.parse(e.target.result); if (Array.isArray(imported)) setBudgets(imported); else alert("Invalid file format."); } catch (error) { alert("Failed to parse file."); }
-        };
-        event.target.value = null;
-    };
-
-    // --- CALCULATIONS --- //
+    // --- CALCULATIONS (No changes) --- //
     const totalAllocated = budgets.reduce((sum, camp) => sum + (camp.totalBudget || 0), 0);
     const totalSpent = budgets.reduce((sum, camp) => sum + (camp.spent || 0), 0);
     const totalRemaining = totalAllocated - totalSpent;
@@ -137,6 +133,14 @@ export default function BudgetsPage() {
         return acc;
     }, {});
 
+    if (loading) {
+        return (
+            <div className="flex h-screen bg-gray-950 text-white items-center justify-center">
+                Loading Budgets...
+            </div>
+        )
+    }
+
     return (
         <div className="font-sans antialiased text-gray-200">
             <div className="flex h-screen bg-gray-950">
@@ -148,9 +152,6 @@ export default function BudgetsPage() {
                             <p className="text-gray-400 mt-1">Your financial command center for all ad spend.</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={() => fileInputRef.current.click()} className="px-4 py-2.5 text-sm font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"><Upload className="w-4 h-4" /> Import</button>
-                            <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" />
-                            <button onClick={handleExport} className="px-4 py-2.5 text-sm font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"><Download className="w-4 h-4" /> Export</button>
                             <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center gap-2 whitespace-nowrap"><Plus className="w-5 h-5" />Add Budget</button>
                         </div>
                     </header>
