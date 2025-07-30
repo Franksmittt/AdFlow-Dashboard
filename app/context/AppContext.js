@@ -1,24 +1,11 @@
+// app/context/AppContext.js
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Import storage functions
-
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const storage = getStorage(app); // Initialize Storage
+// ✅ Import from your new central firebase file
+import { db, storage } from './firebase'; 
+import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const AppContext = createContext();
 
@@ -30,6 +17,7 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // This logic remains the same
     const collectionsToFetch = {
       campaigns: setCampaigns,
       tasks: setTasks,
@@ -61,7 +49,7 @@ export function AppProvider({ children }) {
     return () => unsubs.forEach(unsub => unsub());
   }, []);
 
-  // --- Data Management Functions ---
+  // Data management functions remain the same
   const saveData = async (collectionName, data) => {
     const dataToSave = { ...data };
     Object.keys(dataToSave).forEach(key => {
@@ -82,7 +70,6 @@ export function AppProvider({ children }) {
     await deleteDoc(doc(db, collectionName, id));
   };
 
-  // NEW: Function to upload files to Firebase Storage
   const uploadFile = async (file, path) => {
     const storageRef = ref(storage, path);
     await uploadBytes(storageRef, file);
@@ -95,10 +82,14 @@ export function AppProvider({ children }) {
     tasks,
     notes,
     budgets,
+    setCampaigns,
+    setTasks,
+    setNotes,
+    setBudgets,
     loading,
     saveData,
     deleteData,
-    uploadFile, // Expose the new function
+    uploadFile,
   };
 
   return (

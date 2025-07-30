@@ -1,0 +1,2081 @@
+├── app\
+│   ├── favicon.ico
+│   ├── globals.css
+│   ├── layout.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\layout.js
+--------------------------------------------------------------------------------
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { AppProvider } from './context/AppContext'; // 1. Add this import
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata = {
+  title: "AdFlow Hub", // You can keep your title or use this one
+  description: "Your personal Facebook Ads command center.",
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {/* 2. Wrap the children with AppProvider */}
+        <AppProvider>
+          {children}
+        </AppProvider>
+      </body>
+    </html>
+  );
+}
+
+│   ├── page.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\page.js
+--------------------------------------------------------------------------------
+"use client";
+
+import React, { useState, useEffect, useRef } from 'react';
+import Sidebar from './components/Sidebar';
+import { useAppContext } from './context/AppContext';
+import Link from 'next/link';
+
+// --- ICONS --- //
+const Target = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
+const CheckSquare = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>;
+const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
+const Upload = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>;
+const Download = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
+const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
+
+
+// --- CONFIG --- //
+const statusConfig = {
+    "Planning": { text: "text-blue-400" },
+    "In Progress": { text: "text-yellow-400" },
+    "Live": { text: "text-green-400" },
+    "Completed": { text: "text-gray-500" },
+};
+
+// --- REUSABLE COMPONENTS --- //
+const StatCard = ({ title, value, icon }) => (
+    <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
+        <div className="flex justify-between items-center">
+            <p className="text-sm font-medium text-gray-400">{title}</p>
+            {icon}
+        </div>
+        <p className="text-3xl font-bold mt-2 text-white">{value}</p>
+    </div>
+);
+
+
+// --- MAIN DASHBOARD PAGE COMPONENT --- //
+export default function DashboardPage() {
+    const { campaigns, tasks, notes, budgets, setCampaigns, setTasks, setNotes, setBudgets } = useAppContext();
+    const [dateTime, setDateTime] = useState('');
+    const fileInputRef = useRef(null);
+
+    useEffect(() => {
+        // Set date and time on component mount
+        const now = new Date();
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        setDateTime(now.toLocaleDateString('en-ZA', options));
+    }, []);
+
+    // --- Data Handlers ---
+    const handleExportAll = () => {
+        const allData = { campaigns, tasks, notes, budgets };
+        const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(allData, null, 2))}`;
+        const link = document.createElement("a");
+        link.href = jsonString;
+        link.download = "adflow-hub-backup.json";
+        link.click();
+    };
+
+    const handleImportAll = (event) => {
+        if (!window.confirm("This will overwrite all existing data. Are you sure?")) return;
+        
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const fileReader = new FileReader();
+        fileReader.readAsText(file, "UTF-8");
+        fileReader.onload = e => {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (importedData.campaigns && importedData.tasks && importedData.notes && importedData.budgets) {
+                    setCampaigns(importedData.campaigns);
+                    setTasks(importedData.tasks);
+                    setNotes(importedData.notes);
+                    setBudgets(importedData.budgets);
+                } else {
+                    alert("Invalid backup file format.");
+                }
+            } catch (error) {
+                alert("Failed to parse backup file.");
+            }
+        };
+        event.target.value = null; // Reset file input
+    };
+
+    // --- Dynamic Calculations ---
+    const activeCampaignsCount = campaigns.filter(c => c.status === 'Live').length;
+    const tasksToDoCount = tasks.filter(t => t.status === 'To Do').length;
+    
+    // Total budget allocated across all branches
+    const totalAllocated = budgets.reduce((sum, camp) => sum + (camp.totalBudget || 0), 0);
+
+    // Calculate how many campaigns are in the "In Progress" or "Planning" stage
+    const creativesInProgressCount = campaigns.filter(c => c.status === 'In Progress' || c.status === 'Planning').length;
+
+    const recentCampaigns = campaigns.slice(0, 5); // Show up to 5 recent campaigns
+    const upcomingTasks = tasks.filter(t => t.status !== 'Done').slice(0, 5); // Show up to 5 upcoming tasks
+
+    return (
+        <div className="font-sans antialiased text-gray-200">
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main className="flex-1 p-6 md:p-8 lg:p-10 overflow-y-auto">
+                    {/* Header */}
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white">Dashboard</h2>
+                            <p className="text-gray-400 mt-1">{dateTime}, Alberton</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => fileInputRef.current.click()} className="px-4 py-2.5 text-sm font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"><Upload className="w-4 h-4" /> Import All</button>
+                            <input type="file" ref={fileInputRef} onChange={handleImportAll} accept=".json" className="hidden" />
+                            <button onClick={handleExportAll} className="px-4 py-2.5 text-sm font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"><Download className="w-4 h-4" /> Export All</button>
+                            <Link href="/campaigns" className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap">
+                                <Plus className="w-5 h-5" />
+                                Create Campaign
+                            </Link>
+                        </div>
+                    </header>
+
+                    {/* Stat Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <StatCard title="Active Campaigns" value={activeCampaignsCount} icon={<Target className="w-6 h-6 text-blue-400" />} />
+                        <StatCard title="Total Budget Allocated" value={`R ${totalAllocated.toLocaleString()}`} icon={<DollarSign className="w-6 h-6 text-green-400" />} />
+                        <StatCard title="Creative Pipeline" value={creativesInProgressCount} icon={<Edit className="w-6 h-6 text-purple-400" />} />
+                        <StatCard title="Tasks To-Do" value={tasksToDoCount} icon={<CheckSquare className="w-6 h-6 text-yellow-400" />} />
+                    </div>
+
+                    {/* Main Grid: Campaigns & Tasks */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* Campaigns Section */}
+                        <section className="lg:col-span-2 bg-gray-900/70 border border-gray-800 rounded-xl p-6">
+                            <h3 className="text-xl font-semibold text-white mb-4">Recent Campaigns</h3>
+                            <div className="space-y-4">
+                                {recentCampaigns.map(campaign => (
+                                    <Link href={`/campaigns/${campaign.id}`} key={campaign.id} className="bg-gray-800/60 p-4 rounded-lg flex items-center justify-between hover:bg-gray-800 transition-colors cursor-pointer">
+                                        <div>
+                                            <p className="font-semibold text-white">{campaign.name}</p>
+                                            <p className="text-sm text-gray-400">{campaign.objective}</p>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig[campaign.status]?.text}`}>
+                                                <span className={`w-2 h-2 rounded-full bg-current`}></span>
+                                                {campaign.status}
+                                            </span>
+                                        </div>
+                                    </Link>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* Tasks Section */}
+                        <section className="bg-gray-900/70 border border-gray-800 rounded-xl p-6">
+                            <h3 className="text-xl font-semibold text-white mb-4">Upcoming Tasks</h3>
+                            <div className="space-y-4">
+                                {upcomingTasks.map(task => (
+                                    <div key={task.id} className="bg-gray-800/60 p-4 rounded-lg hover:bg-gray-800 transition-colors">
+                                        <p className="font-semibold text-white">{task.text}</p>
+                                        <div className="flex items-center justify-between mt-2">
+                                            <p className="text-xs text-blue-400 bg-blue-900/50 px-2 py-0.5 rounded-full">{task.campaign}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    </div>
+                </main>
+            </div>
+        </div>
+    );
+}
+
+│   ├── budgets\
+│   │   ├── BudgetClientView.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\budgets\BudgetClientView.js
+--------------------------------------------------------------------------------
+// app/budgets/BudgetClientView.js
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { useAppContext } from '../context/AppContext';
+import Sidebar from '../components/Sidebar';
+import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
+// ✅ Import 'db' from our new central firebase file
+import { db } from '../context/firebase'; 
+
+// --- ICONS --- //
+const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
+const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
+const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
+const Trash2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+const Store = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2V7"/></svg>;
+
+// --- CONFIG --- //
+const BRANCHES = ["Alberton", "Vanderbijlpark", "Sasolburg", "National"];
+
+// --- REUSABLE COMPONENTS --- //
+const StatCard = ({ title, value, icon, color }) => (
+    <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
+        <div className="flex justify-between items-center">
+            <p className="text-sm font-medium text-gray-400">{title}</p>
+            <div className={`p-2 rounded-lg ${color}`}>{icon}</div>
+        </div>
+        <p className="text-3xl font-bold mt-2 text-white">{value}</p>
+    </div>
+);
+
+const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
+    const [name, setName] = useState('');
+    const [branch, setBranch] = useState(BRANCHES[0]);
+    const [totalBudget, setTotalBudget] = useState('');
+    const [dailyBudget, setDailyBudget] = useState('');
+    const [spent, setSpent] = useState('');
+
+    useEffect(() => {
+        if (budgetToEdit) {
+            setName(budgetToEdit.name || '');
+            setBranch(budgetToEdit.branch || BRANCHES[0]);
+            setTotalBudget(budgetToEdit.totalBudget || '');
+            setDailyBudget(budgetToEdit.dailyBudget || '');
+            setSpent(budgetToEdit.spent || 0);
+        } else {
+            setName(''); setBranch(BRANCHES[0]); setTotalBudget(''); setDailyBudget(''); setSpent(0);
+        }
+    }, [budgetToEdit, isOpen]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const savedBudget = { 
+            ...budgetToEdit, 
+            id: budgetToEdit ? budgetToEdit.id : undefined, 
+            name, branch, 
+            totalBudget: parseFloat(totalBudget) || 0, 
+            dailyBudget: parseFloat(dailyBudget) || 0, 
+            spent: parseFloat(spent) || 0, 
+            status: budgetToEdit?.status || 'Planning', 
+            startDate: budgetToEdit?.startDate || new Date().toISOString().slice(0,10) 
+        };
+        onSave(savedBudget);
+    };
+    
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={e => e.stopPropagation()}>
+                <form onSubmit={handleSubmit}>
+                    <div className="flex items-center justify-between p-6 border-b border-gray-800"><h3 className="text-xl font-semibold text-white">{budgetToEdit ? 'Edit Budget' : 'Add Campaign Budget'}</h3><button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button></div>
+                    <div className="p-6 space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">Campaign Name</label><input type="text" id="name" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
+                            <div><label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-1">Branch</label><select id="branch" value={branch} onChange={e => setBranch(e.target.value)} className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map(b => <option key={b}>{b}</option>)}</select></div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div><label htmlFor="totalBudget" className="block text-sm font-medium text-gray-300 mb-1">Total (R)</label><input type="number" id="totalBudget" value={totalBudget} onChange={e => setTotalBudget(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
+                            <div><label htmlFor="dailyBudget" className="block text-sm font-medium text-gray-300 mb-1">Daily (R)</label><input type="number" id="dailyBudget" value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
+                            <div><label htmlFor="spent" className="block text-sm font-medium text-gray-300 mb-1">Spent (R)</label><input type="number" id="spent" value={spent} onChange={e => setSpent(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2"><button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 rounded-lg">Cancel</button><button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg">Save Budget</button></div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+export default function BudgetClientView({ initialBudgets }) {
+    const { saveData, deleteData } = useAppContext();
+    const [budgets, setBudgets] = useState(initialBudgets);
+    const [isModalOpen, setModalOpen] = useState(false);
+    const [budgetToEdit, setBudgetToEdit] = useState(null);
+
+    useEffect(() => {
+        const unsubscribe = onSnapshot(collection(db, 'budgets'), (snapshot) => {
+            const updatedBudgets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setBudgets(updatedBudgets);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    const handleSaveBudget = async (savedBudget) => {
+        try {
+            await saveData('budgets', savedBudget);
+            setModalOpen(false);
+        } catch (error) {
+            console.error("Error saving budget:", error);
+            alert("Failed to save budget.");
+        }
+    };
+    
+    const handleAddClick = () => { setBudgetToEdit(null); setModalOpen(true); };
+    const handleEditClick = (budget) => { setBudgetToEdit(budget); setModalOpen(true); };
+    
+    const handleDeleteClick = async (id) => { 
+        if(window.confirm('Are you sure you want to delete this budget entry?')) { 
+            await deleteData('budgets', id);
+        }
+    };
+
+    const totalAllocated = budgets.reduce((sum, camp) => sum + (camp.totalBudget || 0), 0);
+    const totalSpent = budgets.reduce((sum, camp) => sum + (camp.spent || 0), 0);
+    const totalRemaining = totalAllocated - totalSpent;
+    const activeDailySpend = budgets.filter(b => b.status === 'Live').reduce((sum, camp) => sum + (camp.dailyBudget || 0), 0);
+    
+    const spendByBranch = budgets.reduce((acc, budget) => {
+        const branch = budget.branch || 'Unassigned';
+        if (!acc[branch]) acc[branch] = 0;
+        acc[branch] += budget.spent || 0;
+        return acc;
+    }, {});
+
+    return (
+        <div className="font-sans antialiased text-gray-200">
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white">Budgets Dashboard</h2>
+                            <p className="text-gray-400 mt-1">Your financial command center for all ad spend.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center gap-2 whitespace-nowrap"><Plus className="w-5 h-5" />Add Budget</button>
+                        </div>
+                    </header>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                         <StatCard title="Total Allocated" value={`R ${totalAllocated.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-blue-900/50 text-blue-300" />
+                        <StatCard title="Total Spent" value={`R ${totalSpent.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-yellow-900/50 text-yellow-300" />
+                        <StatCard title="Total Remaining" value={`R ${totalRemaining.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-green-900/50 text-green-300" />
+                        <StatCard title="Active Daily Spend" value={`R ${activeDailySpend.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-purple-900/50 text-purple-300" />
+                    </div>
+
+                    <div className="mb-8">
+                        <h3 className="text-xl font-semibold text-white mb-4">Spend by Branch</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {Object.entries(spendByBranch).map(([branch, spend]) => (
+                                <div key={branch} className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
+                                    <p className="text-sm font-medium text-gray-400 flex items-center gap-2"><Store className="w-4 h-4"/>{branch}</p>
+                                    <p className="text-3xl font-bold mt-2 text-white">R {spend.toLocaleString()}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-900/70 border border-gray-800 rounded-xl flex-1 overflow-auto">
+                        <table className="w-full text-left">
+                            <thead className="sticky top-0 bg-gray-900/70 backdrop-blur-sm"><tr className="border-b border-gray-800">
+                                <th className="p-4 text-sm font-semibold text-gray-400">Campaign</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Branch</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Total Budget</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Spent</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Progress</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Actions</th>
+                            </tr></thead>
+                            <tbody className="divide-y divide-gray-800">
+                                {budgets.map(budget => {
+                                    const progress = budget.totalBudget > 0 ? ((budget.spent || 0) / budget.totalBudget) * 100 : 0;
+                                    return (
+                                        <tr key={budget.id} className="hover:bg-gray-800/60 transition-colors">
+                                            <td className="p-4 font-medium text-white">{budget.name}</td>
+                                            <td className="p-4 text-gray-300">{budget.branch}</td>
+                                            <td className="p-4 text-gray-300">R {budget.totalBudget?.toLocaleString() || 0}</td>
+                                            <td className="p-4 text-yellow-300">R {budget.spent?.toLocaleString() || 0}</td>
+                                            <td className="p-4"><div className="w-full bg-gray-700 rounded-full h-2.5"><div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div></td>
+                                            <td className="p-4"><div className="flex gap-4">
+                                                <button onClick={() => handleEditClick(budget)} className="text-gray-400 hover:text-white"><Edit className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDeleteClick(budget.id)} className="text-gray-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                                            </div></td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </main>
+                <BudgetEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveBudget} budgetToEdit={budgetToEdit} />
+            </div>
+        </div>
+    );
+}
+
+│   │   ├── BudgetView.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\budgets\BudgetView.js
+--------------------------------------------------------------------------------
+// app/budgets/BudgetView.js
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { useAppContext } from '../context/AppContext';
+import Sidebar from '../components/Sidebar';
+import { getFirestore, collection, onSnapshot, initializeApp, getApps } from 'firebase/firestore';
+
+// --- ICONS (needed for components below) --- //
+const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
+const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
+const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
+const Trash2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+const Store = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2V7"/></svg>;
+
+// --- CONFIG --- //
+const BRANCHES = ["Alberton", "Vanderbijlpark", "Sasolburg", "National"];
+
+// --- REUSABLE COMPONENTS --- //
+const StatCard = ({ title, value, icon, color }) => (
+    <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
+        <div className="flex justify-between items-center">
+            <p className="text-sm font-medium text-gray-400">{title}</p>
+            <div className={`p-2 rounded-lg ${color}`}>{icon}</div>
+        </div>
+        <p className="text-3xl font-bold mt-2 text-white">{value}</p>
+    </div>
+);
+
+const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
+    const [name, setName] = useState('');
+    const [branch, setBranch] = useState(BRANCHES[0]);
+    const [totalBudget, setTotalBudget] = useState('');
+    const [dailyBudget, setDailyBudget] = useState('');
+    const [spent, setSpent] = useState('');
+
+    useEffect(() => {
+        if (budgetToEdit) {
+            setName(budgetToEdit.name || '');
+            setBranch(budgetToEdit.branch || BRANCHES[0]);
+            setTotalBudget(budgetToEdit.totalBudget || '');
+            setDailyBudget(budgetToEdit.dailyBudget || '');
+            setSpent(budgetToEdit.spent || 0);
+        } else {
+            setName(''); setBranch(BRANCHES[0]); setTotalBudget(''); setDailyBudget(''); setSpent(0);
+        }
+    }, [budgetToEdit, isOpen]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const savedBudget = { 
+            ...budgetToEdit, 
+            id: budgetToEdit ? budgetToEdit.id : undefined, 
+            name, branch, 
+            totalBudget: parseFloat(totalBudget) || 0, 
+            dailyBudget: parseFloat(dailyBudget) || 0, 
+            spent: parseFloat(spent) || 0, 
+            status: budgetToEdit?.status || 'Planning', 
+            startDate: budgetToEdit?.startDate || new Date().toISOString().slice(0,10) 
+        };
+        onSave(savedBudget);
+    };
+    
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={e => e.stopPropagation()}>
+                <form onSubmit={handleSubmit}>
+                    <div className="flex items-center justify-between p-6 border-b border-gray-800"><h3 className="text-xl font-semibold text-white">{budgetToEdit ? 'Edit Budget' : 'Add Campaign Budget'}</h3><button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button></div>
+                    <div className="p-6 space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">Campaign Name</label><input type="text" id="name" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
+                            <div><label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-1">Branch</label><select id="branch" value={branch} onChange={e => setBranch(e.target.value)} className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map(b => <option key={b}>{b}</option>)}</select></div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div><label htmlFor="totalBudget" className="block text-sm font-medium text-gray-300 mb-1">Total (R)</label><input type="number" id="totalBudget" value={totalBudget} onChange={e => setTotalBudget(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
+                            <div><label htmlFor="dailyBudget" className="block text-sm font-medium text-gray-300 mb-1">Daily (R)</label><input type="number" id="dailyBudget" value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
+                            <div><label htmlFor="spent" className="block text-sm font-medium text-gray-300 mb-1">Spent (R)</label><input type="number" id="spent" value={spent} onChange={e => setSpent(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2"><button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 rounded-lg">Cancel</button><button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg">Save Budget</button></div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+
+export default function BudgetClientView({ initialBudgets }) {
+    const { saveData, deleteData } = useAppContext();
+    const [budgets, setBudgets] = useState(initialBudgets);
+    const [isModalOpen, setModalOpen] = useState(false);
+    const [budgetToEdit, setBudgetToEdit] = useState(null);
+
+    useEffect(() => {
+        // We need to re-initialize firebase on the client
+        const firebaseConfig = {
+            apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+            authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+            projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+            storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+            messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+            appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+        };
+        const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+        const db = getFirestore(app);
+        
+        const unsubscribe = onSnapshot(collection(db, 'budgets'), (snapshot) => {
+            const updatedBudgets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setBudgets(updatedBudgets);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    const handleSaveBudget = async (savedBudget) => {
+        try {
+            await saveData('budgets', savedBudget);
+            setModalOpen(false);
+        } catch (error) {
+            console.error("Error saving budget:", error);
+            alert("Failed to save budget.");
+        }
+    };
+    
+    const handleAddClick = () => { setBudgetToEdit(null); setModalOpen(true); };
+    const handleEditClick = (budget) => { setBudgetToEdit(budget); setModalOpen(true); };
+    
+    const handleDeleteClick = async (id) => { 
+        if(window.confirm('Are you sure you want to delete this budget entry?')) { 
+            await deleteData('budgets', id);
+        }
+    };
+
+    const totalAllocated = budgets.reduce((sum, camp) => sum + (camp.totalBudget || 0), 0);
+    const totalSpent = budgets.reduce((sum, camp) => sum + (camp.spent || 0), 0);
+    const totalRemaining = totalAllocated - totalSpent;
+    const activeDailySpend = budgets.reduce((sum, camp) => sum + (camp.dailyBudget || 0), 0);
+    
+    const spendByBranch = budgets.reduce((acc, budget) => {
+        const branch = budget.branch || 'Unassigned';
+        if (!acc[branch]) acc[branch] = 0;
+        acc[branch] += budget.spent || 0;
+        return acc;
+    }, {});
+
+    return (
+        <div className="font-sans antialiased text-gray-200">
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white">Budgets Dashboard</h2>
+                            <p className="text-gray-400 mt-1">Your financial command center for all ad spend.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center gap-2 whitespace-nowrap"><Plus className="w-5 h-5" />Add Budget</button>
+                        </div>
+                    </header>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                         <StatCard title="Total Allocated" value={`R ${totalAllocated.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-blue-900/50 text-blue-300" />
+                        <StatCard title="Total Spent" value={`R ${totalSpent.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-yellow-900/50 text-yellow-300" />
+                        <StatCard title="Total Remaining" value={`R ${totalRemaining.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-green-900/50 text-green-300" />
+                        <StatCard title="Active Daily Spend" value={`R ${activeDailySpend.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-purple-900/50 text-purple-300" />
+                    </div>
+
+                    <div className="mb-8">
+                        <h3 className="text-xl font-semibold text-white mb-4">Spend by Branch</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {Object.entries(spendByBranch).map(([branch, spend]) => (
+                                <div key={branch} className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
+                                    <p className="text-sm font-medium text-gray-400 flex items-center gap-2"><Store className="w-4 h-4"/>{branch}</p>
+                                    <p className="text-3xl font-bold mt-2 text-white">R {spend.toLocaleString()}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-900/70 border border-gray-800 rounded-xl flex-1 overflow-auto">
+                        <table className="w-full text-left">
+                            <thead className="sticky top-0 bg-gray-900/70 backdrop-blur-sm"><tr className="border-b border-gray-800">
+                                <th className="p-4 text-sm font-semibold text-gray-400">Campaign</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Branch</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Total Budget</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Spent</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Progress</th>
+                                <th className="p-4 text-sm font-semibold text-gray-400">Actions</th>
+                            </tr></thead>
+                            <tbody className="divide-y divide-gray-800">
+                                {budgets.map(budget => {
+                                    const progress = budget.totalBudget > 0 ? ((budget.spent || 0) / budget.totalBudget) * 100 : 0;
+                                    return (
+                                        <tr key={budget.id} className="hover:bg-gray-800/60 transition-colors">
+                                            <td className="p-4 font-medium text-white">{budget.name}</td>
+                                            <td className="p-4 text-gray-300">{budget.branch}</td>
+                                            <td className="p-4 text-gray-300">R {budget.totalBudget?.toLocaleString() || 0}</td>
+                                            <td className="p-4 text-yellow-300">R {budget.spent?.toLocaleString() || 0}</td>
+                                            <td className="p-4"><div className="w-full bg-gray-700 rounded-full h-2.5"><div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div></td>
+                                            <td className="p-4"><div className="flex gap-2">
+                                                <button onClick={() => handleEditClick(budget)} className="text-gray-400 hover:text-white"><Edit className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDeleteClick(budget.id)} className="text-gray-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                                            </div></td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </main>
+                <BudgetEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveBudget} budgetToEdit={budgetToEdit} />
+            </div>
+        </div>
+    );
+}
+
+│   │   ├── page.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\budgets\page.js
+--------------------------------------------------------------------------------
+// app/budgets/page.js
+import BudgetClientView from './BudgetClientView';
+import { getFirestore, collection, getDocs, orderBy, query } from 'firebase/firestore';
+// ✅ Import 'db' from our new central firebase file
+import { db } from '../context/firebase';
+
+// This is a server-side function to fetch the initial list of budgets.
+// It runs on the server, not in the browser.
+async function getBudgets() {
+    try {
+        const budgetsQuery = query(collection(db, 'budgets'), orderBy('startDate', 'desc'));
+        const budgetSnapshot = await getDocs(budgetsQuery);
+        // We need to serialize the data to pass it from a Server Component to a Client Component.
+        const budgetList = budgetSnapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data() 
+        }));
+        return budgetList;
+    } catch (error) {
+        console.error("Failed to fetch budgets on the server:", error);
+        return []; // Return an empty array on error
+    }
+}
+
+// This is now a React Server Component by default.
+export default async function BudgetsPage() {
+    // 1. Data is fetched on the server when the page is requested.
+    const initialBudgets = await getBudgets();
+
+    // 2. The server-fetched data is passed as a prop to our interactive Client Component.
+    return <BudgetClientView initialBudgets={initialBudgets} />;
+}
+
+│   ├── campaigns\
+│   │   ├── CampaignClientView.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\campaigns\CampaignClientView.js
+--------------------------------------------------------------------------------
+// app/campaigns/CampaignClientView.js
+"use client";
+
+import React, { useState, useEffect } from "react";
+import Link from 'next/link';
+import Image from 'next/image'; // Import the next/image component
+import Sidebar from "../components/Sidebar";
+import { useAppContext } from "../context/AppContext";
+import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
+import { app } from '../context/firebase';
+
+// --- ICONS & CONFIG --- //
+const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14" /><path d="M12 5v14" /></svg>;
+const List = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="2" y1="6" x2="22" y2="6" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="2" y1="18" x2="22" y2="18" /></svg>;
+const Trello = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><rect width="8" height="7" x="7" y="7" rx="2" ry="2" /><rect width="8" height="7" x="13" y="13" rx="2" ry="2" /></svg>;
+const BRANCHES = ["Alberton", "Vanderbijlpark", "Sasolburg", "National"];
+const KANBAN_COLUMNS = ["Planning", "In Progress", "Live", "Completed"];
+const statusConfig = {
+    Planning: { color: "blue", bg: "bg-blue-900/50", text: "text-blue-400" },
+    "In Progress": { color: "yellow", bg: "bg-yellow-900/50", text: "text-yellow-400" },
+    Live: { color: "green", bg: "bg-green-900/50", text: "text-green-400" },
+    Completed: { color: "gray", bg: "bg-gray-800", text: "text-gray-400" },
+};
+const AD_FORMATS = ["1:1", "4:5", "9:16"];
+const OBJECTIVES = ["Sales", "Leads", "Brand Awareness", "Engagement"];
+
+
+// --- SUB-COMPONENTS --- //
+const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets }) => {
+    const [name, setName] = useState("");
+    const [branch, setBranch] = useState(BRANCHES[0]);
+    const [objective, setObjective] = useState(OBJECTIVES[0]);
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+    const [primaryText, setPrimaryText] = useState("");
+    const [headlines, setHeadlines] = useState([""]);
+    const [visuals, setVisuals] = useState({ "1:1": null, "4:5": null, "9:16": null });
+    const [targetValue, setTargetValue] = useState("");
+    const [budgetId, setBudgetId] = useState("");
+
+    useEffect(() => {
+        if (isOpen) {
+            if (campaignToEdit) {
+                setName(campaignToEdit.name || "");
+                setBranch(campaignToEdit.branch || BRANCHES[0]);
+                setObjective(campaignToEdit.objective || OBJECTIVES[0]);
+                setStartDate(campaignToEdit.startDate || "");
+                setEndDate(campaignToEdit.endDate || "");
+                setPrimaryText(campaignToEdit.primaryText || "");
+                setHeadlines(campaignToEdit.headlines || [""]);
+                setVisuals(campaignToEdit.visuals || { "1:1": null, "4:5": null, "9:16": null });
+                setTargetValue(campaignToEdit.targetValue || "");
+                setBudgetId(campaignToEdit.budgetId || "");
+            } else {
+                // This block now runs correctly when creating a new campaign
+                setName(""); setBranch(BRANCHES[0]); setObjective(OBJECTIVES[0]); setStartDate(""); setEndDate(""); setPrimaryText(""); setHeadlines([""]); setVisuals({ "1:1": null, "4:5": null, "9:16": null }); setTargetValue(""); setBudgetId("");
+            }
+        }
+    }, [campaignToEdit, isOpen]); // ✅ FIX: Added `isOpen` to the dependency array
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const checklist = {
+            primaryText: !!primaryText, headlines: headlines.some(h => h),
+            visuals: Object.values(visuals).some(v => v), targeting: !!targetValue, budget: !!budgetId,
+        };
+        const savedCampaign = {
+            ...campaignToEdit, id: campaignToEdit?.id, name, branch, objective,
+            startDate, endDate, primaryText, headlines, visuals,
+            targetValue: parseFloat(targetValue) || 0, budgetId, checklist,
+            status: campaignToEdit?.status || "Planning",
+        };
+        onSave(savedCampaign);
+        onClose();
+    };
+    
+    const handleVisualUpload = (format, e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setVisuals((prev) => ({ ...prev, [format]: URL.createObjectURL(file) }));
+        }
+    };
+    const addHeadline = () => setHeadlines((prev) => [...prev, ""]);
+    const updateHeadline = (index, value) => {
+        const newHeadlines = [...headlines];
+        newHeadlines[index] = value;
+        setHeadlines(newHeadlines);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4">
+                <form onSubmit={handleSubmit}>
+                    <div className="flex items-center justify-between p-6 border-b border-gray-800">
+                        <h3 className="text-xl font-semibold text-white">{campaignToEdit ? "Edit Campaign" : "Create New Campaign"}</h3>
+                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                    </div>
+                    <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                        <div><label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">Campaign Name</label><input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-1">Branch</label>
+                                <select id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map((b) => (<option key={b} value={b}>{b}</option>))}</select>
+                            </div>
+                            <div>
+                                <label htmlFor="budget" className="block text-sm font-medium text-gray-300 mb-1">Link Budget</label>
+                                <select id="budget" value={budgetId} onChange={(e) => setBudgetId(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">
+                                    <option value="">No Budget Linked</option>
+                                    {budgets.map((b) => (<option key={b.id} value={b.id}>{b.name} (R{b.totalBudget})</option>))}
+                                </select>
+                            </div>
+                        </div>
+                        <div><label htmlFor="objective" className="block text-sm font-medium text-gray-300 mb-1">Objective</label><select id="objective" value={objective} onChange={(e) => setObjective(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{OBJECTIVES.map((o) => (<option key={o} value={o}>{o}</option>))}</select></div>
+                        <div className="grid grid-cols-2 gap-4"><div><label htmlFor="startDate" className="block text-sm font-medium text-gray-300 mb-1">Start Date</label><input type="date" id="startDate" value={startDate} onChange={(e) => setStartDate(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div><div><label htmlFor="endDate" className="block text-sm font-medium text-gray-300 mb-1">End Date</label><input type="date" id="endDate" value={endDate} onChange={(e) => setEndDate(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div></div>
+                        <div><label htmlFor="primaryText" className="block text-sm font-medium text-gray-300 mb-1">Primary Text</label><textarea id="primaryText" value={primaryText} onChange={(e) => setPrimaryText(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" rows="4" /></div>
+                        <div><label className="block text-sm font-medium text-gray-300 mb-1">Headlines</label>{headlines.map((headline, index) => (<input key={index} type="text" value={headline} onChange={(e) => updateHeadline(index, e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white mb-2" placeholder={`Headline ${index + 1}`} />))}<button type="button" onClick={addHeadline} className="text-yellow-400 hover:text-yellow-300 text-sm">+ Add Headline</button></div>
+                        <div><label className="block text-sm font-medium text-gray-300 mb-1">Visuals (Local Preview)</label>{AD_FORMATS.map((format) => (<div key={format} className="mb-2"><label className="block text-sm text-gray-400">{format} Visual</label><input type="file" accept="image/*" onChange={(e) => handleVisualUpload(format, e)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /><div className="relative w-32 h-32 mt-2">{visuals[format] && (<Image src={visuals[format]} alt={`${format} visual`} fill className="object-cover rounded-md" />)}</div></div>))}</div>
+                        <div><label htmlFor="targetValue" className="block text-sm font-medium text-gray-300 mb-1">Target Value</label><input type="number" id="targetValue" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div>
+                    </div>
+                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600">Cancel</button>
+                        <button type="submit" className="px-4 py-2 text-sm font-medium bg-yellow-400 text-gray-950 rounded-lg hover:bg-yellow-300">Save Campaign</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const CampaignListView = ({ campaigns, onEdit, onDelete }) => (
+    <div className="bg-gray-900/70 border border-gray-800 rounded-xl flex-1 overflow-auto">
+        <table className="w-full text-left">
+            <thead className="sticky top-0 bg-gray-900/70 backdrop-blur-sm">
+                <tr className="border-b border-gray-800">
+                    <th className="p-4 text-sm font-semibold text-gray-400">Name</th><th className="p-4 text-sm font-semibold text-gray-400">Branch</th><th className="p-4 text-sm font-semibold text-gray-400">Objective</th><th className="p-4 text-sm font-semibold text-gray-400">Status</th><th className="p-4 text-sm font-semibold text-gray-400">Progress</th><th className="p-4 text-sm font-semibold text-gray-400">Actions</th>
+                </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800">
+                {campaigns.map((campaign) => {
+                    const progress = campaign.checklist ? (Object.values(campaign.checklist).filter(Boolean).length / Object.keys(campaign.checklist).length) * 100 : 0;
+                    return (
+                        <tr key={campaign.id} className="hover:bg-gray-800/60 transition-colors">
+                            <td className="p-4 font-medium text-white"><Link href={`/campaigns/${campaign.id}`} className="hover:text-yellow-400 transition-colors">{campaign.name}</Link></td>
+                            <td className="p-4 text-sm text-gray-400">{campaign.branch}</td>
+                            <td className="p-4 text-sm text-gray-400">{campaign.objective}</td>
+                            <td className="p-4"><span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig[campaign.status]?.text} ${statusConfig[campaign.status]?.bg}`}>{campaign.status}</span></td>
+                            <td className="p-4"><div className="w-24 bg-gray-700 rounded-full h-2.5"><div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div></td>
+                            <td className="p-4"><div className="flex gap-4"><button onClick={() => onEdit(campaign)} className="text-gray-400 hover:text-yellow-300 transition-colors">Edit</button><button onClick={() => onDelete(campaign.id)} className="text-gray-400 hover:text-red-400 transition-colors">Delete</button></div></td>
+                        </tr>
+                    );
+                })}
+            </tbody>
+        </table>
+    </div>
+);
+
+const CampaignKanbanView = ({ campaigns, onDragStart, onDrop, draggedCampaign }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 flex-1 overflow-y-auto">
+        {KANBAN_COLUMNS.map((status) => (
+            <div key={status} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDrop(e, status)} className={`p-4 border-2 border-dashed rounded-xl flex flex-col transition-colors ${draggedCampaign && draggedCampaign.status !== status ? "border-yellow-400/50" : "border-transparent"} bg-gray-900/70`}>
+                <h3 className="text-lg font-semibold text-white mb-4">{status}</h3>
+                <div className="space-y-4 overflow-y-auto flex-1">
+                    {campaigns.filter((c) => c.status === status).map((campaign) => {
+                        const progress = campaign.checklist ? (Object.values(campaign.checklist).filter(Boolean).length / Object.keys(campaign.checklist).length) * 100 : 0;
+                        return (
+                            <div key={campaign.id} draggable onDragStart={(e) => onDragStart(e, campaign)} className="bg-gray-800 p-4 rounded-lg border border-gray-700 cursor-grab active:cursor-grabbing">
+                                <div className="flex justify-between items-start mb-2"><p className="font-semibold text-white pr-4">{campaign.name}</p><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig[campaign.status]?.bg} ${statusConfig[campaign.status]?.text}`}>{campaign.branch}</span></div>
+                                <p className="text-sm text-gray-400">{campaign.objective}</p>
+                                <div className="w-full bg-gray-700 rounded-full h-2.5 mt-2"><div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
+// --- MAIN CLIENT COMPONENT --- //
+export default function CampaignClientView({ initialCampaigns, initialBudgets }) {
+    const { saveData, deleteData } = useAppContext();
+    const [campaigns, setCampaigns] = useState(initialCampaigns);
+    const [isModalOpen, setModalOpen] = useState(false);
+    const [campaignToEdit, setCampaignToEdit] = useState(null);
+    const [view, setView] = useState("list");
+    const [draggedCampaign, setDraggedCampaign] = useState(null);
+
+    useEffect(() => {
+        const db = getFirestore(app);
+        const unsubscribe = onSnapshot(collection(db, 'campaigns'), (snapshot) => {
+            const updatedCampaigns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setCampaigns(updatedCampaigns);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleSaveCampaign = async (savedCampaign) => { await saveData('campaigns', savedCampaign); setModalOpen(false); };
+    const handleAddClick = () => { setCampaignToEdit(null); setModalOpen(true); };
+    const handleEditClick = (campaign) => { setCampaignToEdit(campaign); setModalOpen(true); };
+    const handleDeleteClick = async (id) => { if (window.confirm("Are you sure?")) { await deleteData('campaigns', id); } };
+    const handleDragStart = (e, campaign) => { setDraggedCampaign(campaign); e.dataTransfer.effectAllowed = "move"; };
+    const handleDrop = async (e, newStatus) => {
+        e.preventDefault();
+        if (draggedCampaign && draggedCampaign.status !== newStatus) {
+            const updatedCampaign = { ...draggedCampaign, status: newStatus };
+            await saveData('campaigns', updatedCampaign);
+        }
+        setDraggedCampaign(null);
+    };
+
+    return (
+        <div className="font-sans antialiased text-gray-200">
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white">Campaigns</h2>
+                            <p className="text-gray-400 mt-1">Manage your Facebook ad campaigns across all stores.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors flex items-center gap-2">
+                                <Plus className="w-5 h-5" /> Create Campaign
+                            </button>
+                        </div>
+                    </header>
+                    <div className="flex items-center bg-gray-800 rounded-lg p-1 mb-8 w-min flex-shrink-0">
+                        <button onClick={() => setView("list")} className={`px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-colors ${view === "list" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`}>
+                            <List className="w-4 h-4" /> List
+                        </button>
+                        <button onClick={() => setView("kanban")} className={`px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-colors ${view === "kanban" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`}>
+                            <Trello className="w-4 h-4" /> Kanban
+                        </button>
+                    </div>
+                    {view === "list" ? (
+                        <CampaignListView campaigns={campaigns} onEdit={handleEditClick} onDelete={handleDeleteClick} />
+                    ) : (
+                        <CampaignKanbanView campaigns={campaigns} onDragStart={handleDragStart} onDrop={handleDrop} draggedCampaign={draggedCampaign} />
+                    )}
+                    <CampaignEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveCampaign} campaignToEdit={campaignToEdit} budgets={initialBudgets} />
+                </main>
+            </div>
+        </div>
+    );
+}
+
+│   │   ├── page.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\campaigns\page.js
+--------------------------------------------------------------------------------
+// app/campaigns/page.js
+import CampaignClientView from './CampaignClientView';
+import { getFirestore, collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db } from '../context/firebase'; // Using our central firebase instance
+
+// Server-side function to get initial campaigns
+async function getCampaigns() {
+    try {
+        const campaignsQuery = query(collection(db, 'campaigns'), orderBy('startDate', 'desc'));
+        const snapshot = await getDocs(campaignsQuery);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Failed to fetch campaigns on server:", error);
+        return [];
+    }
+}
+
+// Server-side function to get budgets (needed for the modal)
+async function getBudgets() {
+    try {
+        const snapshot = await getDocs(collection(db, 'budgets'));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Failed to fetch budgets on server:", error);
+        return [];
+    }
+}
+
+// This is the main Server Component for the page
+export default async function CampaignsPage() {
+    // Fetch initial data on the server
+    const initialCampaigns = await getCampaigns();
+    const initialBudgets = await getBudgets();
+
+    // Pass data to the Client Component for rendering
+    return <CampaignClientView initialCampaigns={initialCampaigns} initialBudgets={initialBudgets} />;
+}
+
+│   │   ├── [id]\
+│   │   │   ├── page.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\campaigns\[id]\page.js
+--------------------------------------------------------------------------------
+"use client";
+
+import React from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useAppContext } from "../../context/AppContext";
+import Sidebar from "../../components/Sidebar";
+import CreativeChecklist from "../../components/campaigns/CreativeChecklist";
+import VisualManager from "../../components/campaigns/VisualManager";
+import CopyManager from "../../components/campaigns/CopyManager";
+
+// --- CONFIG --- //
+const statusConfig = {
+    "Planning": { bg: "bg-blue-900/50", text: "text-blue-300" },
+    "In Progress": { bg: "bg-yellow-900/50", text: "text-yellow-300" },
+    "Live": { bg: "bg-green-900/50", text: "text-green-300" },
+    "Completed": { bg: "bg-gray-800", text: "text-gray-400" },
+};
+
+// --- WIDGET COMPONENTS --- //
+// NOTE: For better maintainability, these could be moved to separate files.
+
+const CampaignOverview = ({ campaign }) => (
+  <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl">
+    <div className="flex justify-between items-start">
+      <div>
+        <h2 className="text-2xl font-bold text-white">{campaign.name}</h2>
+        <p className="text-gray-400 mt-1">{campaign.objective} • {campaign.branch}</p>
+        <p className="text-sm text-gray-500 mt-2">Timeline: {campaign.startDate} → {campaign.endDate}</p>
+      </div>
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${statusConfig[campaign.status]?.bg} ${statusConfig[campaign.status]?.text}`}>
+        {campaign.status}
+      </span>
+    </div>
+  </div>
+);
+
+const AdCreativeHub = ({ campaign, onCampaignUpdate }) => (
+  <div className="space-y-6">
+    <CreativeChecklist campaign={campaign} />
+    <VisualManager campaign={campaign} onSave={onCampaignUpdate} />
+    <CopyManager campaign={campaign} onSave={onCampaignUpdate} />
+  </div>
+);
+
+const LinkedTasks = ({ campaignId, tasks }) => {
+    // ✅ FIX: Now correctly filters tasks by the unique `campaignId`.
+    const campaignTasks = tasks.filter(task => task.campaignId === campaignId);
+
+    return (
+        <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl">
+          <h3 className="text-xl font-semibold text-white mb-4">✅ Linked Tasks</h3>
+          {campaignTasks.length > 0 ? (
+            <ul className="space-y-2">
+                {campaignTasks.map(task => (
+                    <li key={task.id} className="text-gray-300 bg-gray-900/50 p-3 rounded-md text-sm">{task.text}</li>
+                ))}
+            </ul>
+          ) : (
+            <p className="text-gray-500 text-sm">No tasks linked to this campaign yet.</p>
+          )}
+        </div>
+    );
+};
+
+// --- MAIN PAGE COMPONENT --- //
+export default function CampaignDetailPage() {
+  const { campaigns, tasks, saveData, loading } = useAppContext();
+  const params = useParams();
+  const router = useRouter(); 
+
+  // Find the campaign using the unique ID from the URL
+  const campaign = campaigns.find((c) => c.id === params.id);
+
+  const handleCampaignUpdate = async (updatedData) => {
+    if (!campaign) return;
+    try {
+        const campaignToSave = { ...campaign, ...updatedData };
+        await saveData('campaigns', campaignToSave);
+    } catch (error) {
+        console.error("Error updating campaign:", error);
+        alert("Failed to update campaign. Please check the console for details.");
+    }
+  };
+
+  if (loading) {
+    return (
+        <div className="flex h-screen bg-gray-950 text-white items-center justify-center">
+            <p>Loading Campaign Details...</p>
+        </div>
+    )
+  }
+
+  if (!campaign) {
+    return (
+        <div className="flex h-screen bg-gray-950">
+            <Sidebar />
+            <main className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold text-white">Campaign Not Found</h2>
+                    <button onClick={() => router.push('/campaigns')} className="mt-4 px-4 py-2 bg-yellow-400 text-gray-950 rounded-lg hover:bg-yellow-300 transition-colors">
+                        Back to All Campaigns
+                    </button>
+                </div>
+            </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="font-sans antialiased text-gray-200">
+      <div className="flex h-screen bg-gray-950">
+        <Sidebar />
+        <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col gap-6 overflow-y-auto">
+          <header>
+             <button onClick={() => router.back()} className="text-sm text-yellow-400 hover:text-yellow-300 mb-2">
+                &larr; Back to Campaigns
+             </button>
+            <h1 className="text-3xl font-bold text-white">Campaign: {campaign.name}</h1>
+          </header>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-3">
+              <CampaignOverview campaign={campaign} />
+            </div>
+
+            <div className="lg:col-span-2">
+              <AdCreativeHub campaign={campaign} onCampaignUpdate={handleCampaignUpdate} />
+            </div>
+
+            <div className="lg:col-span-1">
+                {/* ✅ FIX: Passing the unique `campaign.id` to the component. */}
+                <LinkedTasks campaignId={campaign.id} tasks={tasks} />
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+│   ├── components\
+│   │   ├── Sidebar.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\Sidebar.js
+--------------------------------------------------------------------------------
+"use client";
+
+import Link from 'next/link';
+import Image from 'next/image';
+import { usePathname } from 'next/navigation';
+
+// --- ICONS --- //
+const LayoutDashboard = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7"height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg>;
+const Target = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
+const CheckSquare = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>;
+const Notebook = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 6h4"></path><path d="M2 10h4"></path><path d="M2 14h4"></path><path d="M2 18h4"></path><rect width="16" height="20" x="4" y="2" rx="2"></rect><path d="M16 2v20"></path></svg>;
+const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
+const BatteryIcon = ({ className }) => <svg className={className} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="0.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16,2H8A4,4,0,0,0,4,6V18a4,4,0,0,0,4,4h8a4,4,0,0,0,4-4V6A4,4,0,0,0,16,2Zm-4,3a1,1,0,0,1,1,1V8a1,1,0,0,1-2,0V6A1,1,0,0,1,12,5Zm-2,9H8a1,1,0,0,1,0-2h2a1,1,0,0,1,0,2Zm4,0H14a1,1,0,0,1,0-2h2a1,1,0,0,1,0,2Z" /></svg>;
+
+
+const NavLink = ({ href, icon, children }) => {
+    const pathname = usePathname();
+    const isActive = pathname === href;
+
+    const activeClasses = "bg-gray-800 text-white";
+    const inactiveClasses = "text-gray-400 hover:bg-gray-800 hover:text-white";
+
+    return (
+        <Link href={href} className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${isActive ? activeClasses : inactiveClasses}`}>
+            {icon}
+            {children}
+        </Link>
+    );
+};
+
+
+export default function Sidebar() {
+    return (
+        <aside className="w-64 flex-shrink-0 bg-gray-900 text-gray-200 flex-col hidden md:flex">
+            <div className="h-16 flex items-center justify-center px-4 border-b border-gray-800">
+                <BatteryIcon className="w-8 h-8 mr-2 text-yellow-400" />
+                <h1 className="text-xl font-bold text-white">AdFlow Hub</h1>
+            </div>
+            <nav className="flex-1 px-4 py-6 space-y-2">
+                <NavLink href="/" icon={<LayoutDashboard className="w-5 h-5 mr-3" />}>Dashboard</NavLink>
+                <NavLink href="/campaigns" icon={<Target className="w-5 h-5 mr-3" />}>Campaigns</NavLink>
+                <NavLink href="/tasks" icon={<CheckSquare className="w-5 h-5 mr-3" />}>Tasks</NavLink>
+                <NavLink href="/notes" icon={<Notebook className="w-5 h-5 mr-3" />}>Notes</NavLink>
+                <NavLink href="/budgets" icon={<DollarSign className="w-5 h-5 mr-3" />}>Budgets</NavLink>
+            </nav>
+            <div className="px-4 py-6 mt-auto border-t border-gray-800">
+                <div className="flex items-center">
+                    <Image className="rounded-full object-cover" src="https://placehold.co/100x100/eab308/FFFFFF?text=F" alt="User avatar" width={40} height={40} />
+                    <div className="ml-3">
+                        <p className="text-sm font-semibold text-white">Felix</p>
+                        <p className="text-xs text-gray-400">Marketing Lead</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    );
+}
+
+
+│   │   ├── campaigns\
+│   │   │   ├── CopyManager.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\campaigns\CopyManager.js
+--------------------------------------------------------------------------------
+// app/components/campaigns/CopyManager.js
+
+"use client";
+import React, { useState, useEffect } from 'react';
+
+export default function CopyManager({ campaign, onSave }) {
+    const [primaryText, setPrimaryText] = useState('');
+    const [headlines, setHeadlines] = useState(['']);
+    const [hasChanges, setHasChanges] = useState(false);
+
+    useEffect(() => {
+        setPrimaryText(campaign.primaryText || '');
+        setHeadlines(campaign.headlines && campaign.headlines.length > 0 ? campaign.headlines : ['']);
+    }, [campaign]);
+
+    const handlePrimaryTextChange = (e) => {
+        setPrimaryText(e.target.value);
+        setHasChanges(true);
+    };
+
+    const handleHeadlineChange = (index, value) => {
+        const newHeadlines = [...headlines];
+        newHeadlines[index] = value;
+        setHeadlines(newHeadlines);
+        setHasChanges(true);
+    };
+
+    const addHeadline = () => {
+        setHeadlines([...headlines, '']);
+        setHasChanges(true);
+    };
+
+    const removeHeadline = (index) => {
+        if (headlines.length <= 1) return; // Prevent removing the last one
+        const newHeadlines = headlines.filter((_, i) => i !== index);
+        setHeadlines(newHeadlines);
+        setHasChanges(true);
+    };
+
+    const handleSave = () => {
+        // Filter out any empty headlines before saving
+        const finalHeadlines = headlines.filter(h => h.trim() !== '');
+        onSave({ primaryText, headlines: finalHeadlines });
+        setHasChanges(false);
+    };
+
+    return (
+        <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl mt-6">
+            <h3 className="text-xl font-semibold text-white mb-4">📝 Copy & Headlines</h3>
+
+            {/* Primary Text */}
+            <div>
+                <label htmlFor="primaryText" className="block text-sm font-medium text-gray-300 mb-1">
+                    Primary Text
+                </label>
+                <textarea
+                    id="primaryText"
+                    value={primaryText}
+                    onChange={handlePrimaryTextChange}
+                    className="w-full bg-gray-900 border-gray-700 rounded-lg p-2 text-white h-32"
+                    rows="4"
+                />
+            </div>
+
+            {/* Headlines */}
+            <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-300 mb-1">Headlines</label>
+                {headlines.map((headline, index) => (
+                    <div key={index} className="flex items-center gap-2 mb-2">
+                        <input
+                            type="text"
+                            value={headline}
+                            onChange={(e) => handleHeadlineChange(index, e.target.value)}
+                            className="w-full bg-gray-900 border-gray-700 rounded-lg p-2 text-white"
+                            placeholder={`Headline ${index + 1}`}
+                        />
+                        <button
+                            onClick={() => removeHeadline(index)}
+                            className="text-gray-500 hover:text-red-400 disabled:opacity-50"
+                            disabled={headlines.length <= 1}
+                        >
+                            &times;
+                        </button>
+                    </div>
+                ))}
+                <button
+                    onClick={addHeadline}
+                    className="text-yellow-400 hover:text-yellow-300 text-sm mt-2"
+                >
+                    + Add Headline
+                </button>
+            </div>
+
+            {hasChanges && (
+                <div className="flex justify-end mt-6">
+                   <button 
+                       onClick={handleSave}
+                       className="px-5 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors"
+                   >
+                       Save Copy
+                   </button>
+               </div>
+           )}
+        </div>
+    );
+}
+
+│   │   │   ├── CreativeChecklist.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\campaigns\CreativeChecklist.js
+--------------------------------------------------------------------------------
+// app/components/campaigns/CreativeChecklist.js
+
+"use client";
+import React from 'react';
+
+const ChecklistItem = ({ label, isChecked }) => (
+    <div className="flex items-center bg-gray-900/50 p-3 rounded-lg">
+        <div className={`w-5 h-5 flex items-center justify-center rounded-full mr-3 ${isChecked ? 'bg-green-500' : 'bg-gray-700'}`}>
+            {isChecked && (
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                </svg>
+            )}
+        </div>
+        <span className={`capitalize ${isChecked ? 'text-gray-300' : 'text-gray-500'}`}>{label.replace(/([A-Z])/g, ' $1')}</span>
+    </div>
+);
+
+
+export default function CreativeChecklist({ campaign }) {
+    // If checklist doesn't exist, default to all false to prevent errors
+    const checklist = campaign.checklist || {
+        primaryText: false,
+        headlines: false,
+        visuals: false,
+        targeting: false,
+        budget: false,
+    };
+
+    const checklistItems = Object.entries(checklist);
+    const completedItems = checklistItems.filter(([_, isChecked]) => isChecked).length;
+    const totalItems = checklistItems.length;
+    const progress = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
+
+    return (
+        <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl">
+            <h3 className="text-xl font-semibold text-white mb-4">🚀 Creative Checklist</h3>
+            
+            {/* Progress Bar */}
+            <div className="mb-6">
+                <div className="flex justify-between mb-1">
+                    <span className="text-base font-medium text-yellow-400">Campaign Progress</span>
+                    <span className="text-sm font-medium text-yellow-400">{Math.round(progress)}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2.5">
+                    <div 
+                        className="bg-yellow-400 h-2.5 rounded-full transition-all duration-500" 
+                        style={{ width: `${progress}%` }}
+                    ></div>
+                </div>
+            </div>
+
+            {/* Checklist */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {checklistItems.map(([key, isChecked]) => (
+                    <ChecklistItem key={key} label={key} isChecked={isChecked} />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+│   │   │   ├── VisualManager.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\campaigns\VisualManager.js
+--------------------------------------------------------------------------------
+"use client";
+import React, { useState, useEffect } from 'react';
+// ✅ FIX: Corrected the import path to go up two directories (`../../`) to find the context.
+import { useAppContext } from '../../context/AppContext';
+
+const AD_FORMATS = ["1:1", "4:5", "9:16"];
+
+export default function VisualManager({ campaign, onSave }) {
+    const { uploadFile } = useAppContext();
+    const [visuals, setVisuals] = useState({ "1:1": null, "4:5": null, "9:16": null });
+    const [newFiles, setNewFiles] = useState({}); // To track selected files
+    const [isUploading, setIsUploading] = useState(false);
+
+    useEffect(() => {
+        // When the campaign data changes, update the local visuals state
+        if (campaign.visuals) {
+            setVisuals(campaign.visuals);
+        } else {
+            // Reset if the campaign has no visuals
+            setVisuals({ "1:1": null, "4:5": null, "9:16": null });
+        }
+    }, [campaign]);
+
+    const handleFileSelect = (format, e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setNewFiles(prev => ({ ...prev, [format]: file }));
+            // Show a local preview of the selected image immediately
+            setVisuals(prev => ({ ...prev, [format]: URL.createObjectURL(file) }));
+        }
+    };
+
+    const handleSave = async () => {
+        setIsUploading(true);
+        const updatedVisuals = { ...visuals }; // Start with current visuals
+
+        // Loop through only the newly selected files and upload them
+        for (const format in newFiles) {
+            const file = newFiles[format];
+            if (file) {
+                const path = `campaigns/${campaign.id}/${format}-${file.name}`;
+                const downloadURL = await uploadFile(file, path);
+                updatedVisuals[format] = downloadURL; // Update the URL for the uploaded file
+            }
+        }
+        
+        // Pass the final set of visual URLs up to the parent component
+        onSave({ visuals: updatedVisuals });
+        setNewFiles({}); // Clear the queue of new files
+        setIsUploading(false);
+    };
+
+    const hasChanges = Object.keys(newFiles).length > 0;
+
+    return (
+        <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl mt-6">
+            <h3 className="text-xl font-semibold text-white mb-4">🖼️ Visual Asset Manager</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {AD_FORMATS.map((format) => (
+                    <div key={format}>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Format {format}</label>
+                        <div className="w-full h-48 bg-gray-900/50 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-700 overflow-hidden">
+                            {visuals[format] ? (
+                                <img src={visuals[format]} alt={`${format} visual preview`} className="w-full h-full object-contain" />
+                            ) : (
+                                <span className="text-gray-500 text-sm">No Image</span>
+                            )}
+                        </div>
+                        <input
+                            type="file"
+                            accept="image/*,video/*"
+                            onChange={(e) => handleFileSelect(format, e)}
+                            className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-yellow-950 hover:file:bg-yellow-300 mt-3 cursor-pointer"
+                        />
+                    </div>
+                ))}
+            </div>
+
+            {(hasChanges || isUploading) && (
+                 <div className="flex justify-end mt-6">
+                    <button 
+                        onClick={handleSave}
+                        disabled={isUploading}
+                        className="px-5 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                    >
+                        {isUploading ? 'Uploading...' : 'Save Visuals'}
+                    </button>
+                 </div>
+            )}
+        </div>
+    );
+}
+
+│   ├── context\
+│   │   ├── AppContext.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\context\AppContext.js
+--------------------------------------------------------------------------------
+// app/context/AppContext.js
+"use client";
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+// ✅ Import from your new central firebase file
+import { db, storage } from './firebase'; 
+import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
+const AppContext = createContext();
+
+export function AppProvider({ children }) {
+  const [campaigns, setCampaigns] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // This logic remains the same
+    const collectionsToFetch = {
+      campaigns: setCampaigns,
+      tasks: setTasks,
+      notes: setNotes,
+      budgets: setBudgets,
+    };
+    
+    let loadedCount = 0;
+    const totalCollections = Object.keys(collectionsToFetch).length;
+
+    const unsubs = Object.entries(collectionsToFetch).map(([name, setter]) => 
+      onSnapshot(collection(db, name), (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setter(data);
+        
+        loadedCount++;
+        if (loadedCount === totalCollections) {
+            setLoading(false);
+        }
+      }, (error) => {
+        console.error("Error fetching collection: ", name, error);
+        loadedCount++;
+        if (loadedCount === totalCollections) {
+            setLoading(false);
+        }
+      })
+    );
+
+    return () => unsubs.forEach(unsub => unsub());
+  }, []);
+
+  // Data management functions remain the same
+  const saveData = async (collectionName, data) => {
+    const dataToSave = { ...data };
+    Object.keys(dataToSave).forEach(key => {
+        if (dataToSave[key] === undefined) {
+            delete dataToSave[key];
+        }
+    });
+
+    if (data.id) {
+      const docRef = doc(db, collectionName, data.id);
+      await setDoc(docRef, dataToSave, { merge: true });
+    } else {
+      await addDoc(collection(db, collectionName), dataToSave);
+    }
+  };
+
+  const deleteData = async (collectionName, id) => {
+    await deleteDoc(doc(db, collectionName, id));
+  };
+
+  const uploadFile = async (file, path) => {
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(storageRef);
+    return downloadURL;
+  };
+
+  const value = {
+    campaigns,
+    tasks,
+    notes,
+    budgets,
+    setCampaigns,
+    setTasks,
+    setNotes,
+    setBudgets,
+    loading,
+    saveData,
+    deleteData,
+    uploadFile,
+  };
+
+  return (
+    <AppContext.Provider value={value}>
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+export function useAppContext() {
+  return useContext(AppContext);
+}
+
+│   │   ├── firebase.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\context\firebase.js
+--------------------------------------------------------------------------------
+// app/context/firebase.js
+import { initializeApp, getApps } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+
+const firebaseConfig = {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+};
+
+// Initialize Firebase only if it hasn't been already
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+// Export the instances you'll need in other files
+export { app, db, storage };
+
+│   ├── notes\
+│   │   ├── NoteClientView.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\notes\NoteClientView.js
+--------------------------------------------------------------------------------
+// app/notes/NoteClientView.js
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import Sidebar from '../components/Sidebar';
+import { useAppContext } from '../context/AppContext';
+import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
+import { app } from '../context/firebase';
+
+// --- ICONS & CONFIG --- //
+const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
+const MoreVertical = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>;
+const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
+const Trash2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+const NOTE_COLORS = ['bg-gray-800', 'bg-red-900/80', 'bg-yellow-900/80', 'bg-green-900/80', 'bg-blue-900/80', 'bg-indigo-900/80', 'bg-purple-900/80', 'bg-pink-900/80'];
+
+// --- SUB-COMPONENTS --- //
+const NoteEditorModal = ({ isOpen, onClose, onSave, noteToEdit }) => {
+    const [title, setTitle] = useState('');
+    const [content, setContent] = useState('');
+    const [color, setColor] = useState(NOTE_COLORS[0]);
+
+    useEffect(() => {
+        // This effect now runs every time the modal opens
+        if (isOpen) {
+            if (noteToEdit) {
+                setTitle(noteToEdit.title || '');
+                setContent(noteToEdit.content || '');
+                setColor(noteToEdit.color || NOTE_COLORS[0]);
+            } else {
+                setTitle('');
+                setContent('');
+                setColor(NOTE_COLORS[0]);
+            }
+        }
+    }, [noteToEdit, isOpen]); // ✅ FIX: Added `isOpen` to dependency array
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const savedNote = { ...noteToEdit, id: noteToEdit?.id, title, content, color };
+        onSave(savedNote);
+    };
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={e => e.stopPropagation()}>
+                <form onSubmit={handleSubmit}>
+                    <div className="flex items-center justify-between p-6 border-b border-gray-800">
+                        <h3 className="text-xl font-semibold text-white">{noteToEdit ? 'Edit Note' : 'Create New Note'}</h3>
+                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <div>
+                            <label htmlFor="noteTitle" className="block text-sm font-medium text-gray-300 mb-1">Note Title</label>
+                            <input type="text" name="noteTitle" id="noteTitle" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Competitor Analysis" required className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+                        </div>
+                        <div>
+                            <label htmlFor="noteContent" className="block text-sm font-medium text-gray-300 mb-1">Content</label>
+                            <textarea name="noteContent" id="noteContent" value={content} onChange={(e) => setContent(e.target.value)} rows="6" placeholder="Jot down your ideas..." required className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"></textarea>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">Color</label>
+                            <div className="flex gap-3">
+                                {NOTE_COLORS.map(c => (
+                                    <button type="button" key={c} onClick={() => setColor(c)} className={`w-8 h-8 rounded-full ${c} transition-transform duration-150 ${color === c ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white' : 'hover:scale-110'}`} aria-label={`Select color ${c}`}></button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
+                        <button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors">Save Note</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const NoteCard = ({ note, onEdit, onDelete }) => {
+    const [isMenuOpen, setMenuOpen] = useState(false);
+    return (
+        <div className={`rounded-xl shadow-lg flex flex-col ${note.color} border border-gray-700/50`}>
+            <div className="p-6 flex-1 flex flex-col">
+                <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-lg text-white break-words">{note.title}</h3>
+                    <div className="relative flex-shrink-0">
+                        <button onClick={() => setMenuOpen(!isMenuOpen)} onBlur={() => setTimeout(() => setMenuOpen(false), 100)} className="text-white/60 hover:text-white">
+                            <MoreVertical className="w-5 h-5" />
+                        </button>
+                        {isMenuOpen && (
+                            <div className="absolute right-0 mt-2 w-32 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-10">
+                                <button onClick={() => { onEdit(note); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"><Edit className="w-4 h-4" /> Edit</button>
+                                <button onClick={() => { onDelete(note.id); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-700"><Trash2 className="w-4 h-4" /> Delete</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                <p className="text-white/80 text-sm whitespace-pre-wrap flex-1 break-words">{note.content}</p>
+            </div>
+        </div>
+    );
+};
+
+
+// --- MAIN CLIENT COMPONENT --- //
+export default function NoteClientView({ initialNotes }) {
+    const { saveData, deleteData } = useAppContext();
+    const [notes, setNotes] = useState(initialNotes);
+    const [isEditorOpen, setEditorOpen] = useState(false);
+    const [noteToEdit, setNoteToEdit] = useState(null);
+
+    useEffect(() => {
+        const db = getFirestore(app);
+        const unsubscribe = onSnapshot(collection(db, 'notes'), (snapshot) => {
+            const updatedNotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setNotes(updatedNotes);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleSaveNote = async (savedNote) => {
+        try {
+            await saveData('notes', savedNote);
+            setEditorOpen(false);
+        } catch (error) {
+            console.error("Error saving note: ", error);
+            alert("Failed to save note.");
+        }
+    };
+    const handleOpenCreateModal = () => { setNoteToEdit(null); setEditorOpen(true); };
+    const handleOpenEditModal = (note) => { setNoteToEdit(note); setEditorOpen(true); };
+    const handleDelete = async (id) => {
+        if (window.confirm("Are you sure you want to delete this note?")) {
+            await deleteData('notes', id);
+        }
+    };
+
+    return (
+        <div className="font-sans antialiased text-gray-200">
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white">Notes Hub</h2>
+                            <p className="text-gray-400 mt-1">Your space for brainstorming and strategic planning.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap">
+                                <Plus className="w-5 h-5" /> Create Note
+                            </button>
+                        </div>
+                    </header>
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-y-auto pb-4">
+                        {notes.map(note => (
+                            <NoteCard key={note.id} note={note} onEdit={handleOpenEditModal} onDelete={handleDelete} />
+                        ))}
+                    </div>
+                </main>
+                <NoteEditorModal isOpen={isEditorOpen} onClose={() => setEditorOpen(false)} onSave={handleSaveNote} noteToEdit={noteToEdit} />
+            </div>
+        </div>
+    );
+}
+
+│   │   ├── page.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\notes\page.js
+--------------------------------------------------------------------------------
+// app/notes/page.js
+import NoteClientView from './NoteClientView';
+import { getFirestore, collection, getDocs, query } from 'firebase/firestore';
+import { db } from '../context/firebase';
+
+// Server-side function to get initial notes
+async function getNotes() {
+    try {
+        // You might want to add ordering to your notes
+        const snapshot = await getDocs(query(collection(db, 'notes')));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Failed to fetch notes on server:", error);
+        return [];
+    }
+}
+
+// Main Server Component for the page
+export default async function NotesPage() {
+    // Fetch initial data on the server
+    const initialNotes = await getNotes();
+
+    // Pass data to the Client Component
+    return <NoteClientView initialNotes={initialNotes} />;
+}
+
+│   ├── tasks\
+│   │   ├── page.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\tasks\page.js
+--------------------------------------------------------------------------------
+// app/tasks/page.js
+import TaskClientView from './TaskClientView';
+import { getFirestore, collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db } from '../context/firebase';
+
+// Server-side function to get initial tasks
+async function getTasks() {
+    try {
+        // You might want to add ordering to your tasks as well
+        const snapshot = await getDocs(collection(db, 'tasks'));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Failed to fetch tasks on server:", error);
+        return [];
+    }
+}
+
+// Re-using the getCampaigns function from the other page
+async function getCampaigns() {
+    try {
+        const campaignsQuery = query(collection(db, 'campaigns'), orderBy('startDate', 'desc'));
+        const snapshot = await getDocs(campaignsQuery);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Failed to fetch campaigns on server:", error);
+        return [];
+    }
+}
+
+// Main Server Component for the page
+export default async function TasksPage() {
+    // Fetch initial data on the server in parallel
+    const [initialTasks, initialCampaigns] = await Promise.all([
+        getTasks(),
+        getCampaigns()
+    ]);
+
+    // Pass data to the Client Component
+    return <TaskClientView initialTasks={initialTasks} initialCampaigns={initialCampaigns} />;
+}
+
+│   │   ├── TaskClientView.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\tasks\TaskClientView.js
+--------------------------------------------------------------------------------
+// app/tasks/TaskClientView.js
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import Sidebar from '../components/Sidebar';
+import { useAppContext } from '../context/AppContext';
+import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
+import { app } from '../context/firebase';
+
+// --- ICONS & CONFIG --- //
+const Target = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
+const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
+const MoreVertical = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>;
+const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
+const Trash2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+const statusConfig = {
+    "To Do": { color: "gray", bg: "bg-gray-800", text: "text-gray-400" },
+    "In Progress": { color: "blue", bg: "bg-blue-900/50", text: "text-blue-300" },
+    "Done": { color: "green", bg: "bg-green-900/50", text: "text-green-300" },
+};
+const priorityConfig = { "High": "bg-red-500", "Medium": "bg-yellow-500", "Low": "bg-green-500" };
+const KANBAN_COLUMNS = ["To Do", "In Progress", "Done"];
+
+// --- SUB-COMPONENTS --- //
+const TaskEditorModal = ({ isOpen, onClose, onSave, taskToEdit, campaigns }) => {
+    const [text, setText] = useState('');
+    const [campaignId, setCampaignId] = useState('');
+    const [priority, setPriority] = useState('Medium');
+
+    useEffect(() => {
+        // This effect now runs correctly every time the modal opens
+        if (isOpen) {
+            if (taskToEdit) {
+                setText(taskToEdit.text || '');
+                setCampaignId(taskToEdit.campaignId || (campaigns[0]?.id || ''));
+                setPriority(taskToEdit.priority || 'Medium');
+            } else {
+                setText('');
+                setCampaignId(campaigns[0]?.id || '');
+                setPriority('Medium');
+            }
+        }
+    }, [taskToEdit, isOpen, campaigns]); // ✅ Correct dependency array
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const linkedCampaign = campaigns.find(c => c.id === campaignId);
+        const savedTask = {
+            ...taskToEdit, id: taskToEdit?.id, text, priority,
+            campaignId: campaignId,
+            campaign: linkedCampaign ? linkedCampaign.name : 'Unassigned',
+            status: taskToEdit?.status || 'To Do'
+        };
+        onSave(savedTask);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={(e) => e.stopPropagation()}>
+                <form onSubmit={handleSubmit}>
+                    <div className="flex items-center justify-between p-6 border-b border-gray-800">
+                        <h3 className="text-xl font-semibold text-white">{taskToEdit ? 'Edit Task' : 'Create New Task'}</h3>
+                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <div>
+                            <label htmlFor="taskText" className="block text-sm font-medium text-gray-300 mb-1">Task Description</label>
+                            <input type="text" name="taskText" id="taskText" value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g., Design new video creative" required className="w-full bg-gray-800 border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="w-full">
+                                <label htmlFor="campaign" className="block text-sm font-medium text-gray-300 mb-1">Link to Campaign</label>
+                                <select name="campaign" id="campaign" value={campaignId} onChange={(e) => setCampaignId(e.target.value)} className="w-full bg-gray-800 border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400">
+                                    <option value="">Unassigned</option>
+                                    {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="w-full">
+                                <label htmlFor="priority" className="block text-sm font-medium text-gray-300 mb-1">Priority</label>
+                                <select name="priority" id="priority" value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full bg-gray-800 border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400">
+                                    <option>High</option><option>Medium</option><option>Low</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
+                        <button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors">Save Task</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const TaskCard = ({ task, onEdit, onDelete, onDragStart, isDragging }) => {
+    const [isMenuOpen, setMenuOpen] = useState(false);
+    return (
+        <div draggable onDragStart={onDragStart} className={`bg-gray-800/80 p-4 rounded-lg cursor-grab active:cursor-grabbing transition-opacity ${isDragging ? 'opacity-50' : 'opacity-100'}`}>
+            <div className="flex justify-between items-start mb-2">
+                <p className="font-semibold text-white pr-4 break-words">{task.text}</p>
+                <div className="relative flex-shrink-0">
+                    <button onClick={() => setMenuOpen(!isMenuOpen)} onBlur={() => setTimeout(() => setMenuOpen(false), 100)} className="text-gray-500 hover:text-white">
+                        <MoreVertical className="w-5 h-5" />
+                    </button>
+                    {isMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-32 bg-gray-700 border border-gray-600 rounded-md shadow-lg z-10">
+                            <button onClick={() => { onEdit(task); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-600"><Edit className="w-4 h-4" /> Edit</button>
+                            <button onClick={() => { onDelete(task.id); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-600"><Trash2 className="w-4 h-4" /> Delete</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-blue-400 bg-blue-900/50 px-2 py-0.5 rounded-full flex items-center gap-1.5">
+                    <Target className="w-3 h-3" />
+                    {task.campaign || 'Unassigned'}
+                </p>
+                <span className={`w-3 h-3 rounded-full ${priorityConfig[task.priority]}`} title={`Priority: ${task.priority}`}></span>
+            </div>
+        </div>
+    );
+};
+
+
+// --- MAIN CLIENT COMPONENT --- //
+export default function TaskClientView({ initialTasks, initialCampaigns }) {
+    const { saveData, deleteData } = useAppContext();
+    const [tasks, setTasks] = useState(initialTasks);
+    const [isModalOpen, setModalOpen] = useState(false);
+    const [taskToEdit, setTaskToEdit] = useState(null);
+    const [draggedTask, setDraggedTask] = useState(null);
+
+    useEffect(() => {
+        const db = getFirestore(app);
+        const unsubscribe = onSnapshot(collection(db, 'tasks'), (snapshot) => {
+            const updatedTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setTasks(updatedTasks);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleOpenCreateModal = () => { setTaskToEdit(null); setModalOpen(true); };
+    const handleOpenEditModal = (task) => { setTaskToEdit(task); setModalOpen(true); };
+    const handleSaveTask = async (savedTask) => {
+        try {
+            await saveData('tasks', savedTask);
+            setModalOpen(false);
+        } catch (error) {
+            console.error("Error saving task:", error);
+            alert("Failed to save task.");
+        }
+    };
+    const handleDelete = async (id) => {
+        if (window.confirm("Are you sure you want to delete this task?")) {
+            await deleteData('tasks', id);
+        }
+    };
+    const handleDragStart = (e, task) => { setDraggedTask(task); e.dataTransfer.effectAllowed = 'move'; };
+    const handleDragOver = (e) => { e.preventDefault(); };
+    const handleDrop = async (e, newStatus) => {
+        e.preventDefault();
+        if (draggedTask && draggedTask.status !== newStatus) {
+            const updatedTask = { ...draggedTask, status: newStatus };
+            await saveData('tasks', updatedTask);
+        }
+        setDraggedTask(null);
+    };
+
+    return (
+        <div className="font-sans antialiased text-gray-200">
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white">Tasks Board</h2>
+                            <p className="text-gray-400 mt-1">Organize your workflow from &apos;To Do&apos; to &apos;Done&apos;.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap"><Plus className="w-5 h-5" />Create Task</button>
+                        </div>
+                    </header>
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-x-auto">
+                        {KANBAN_COLUMNS.map(status => (
+                            <div key={status} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, status)} className="bg-gray-900/70 border-dashed border-2 border-transparent data-[is-over=true]:border-yellow-400/50 rounded-xl flex flex-col min-w-[300px]" data-is-over={draggedTask && draggedTask.status !== status}>
+                                <div className="p-4 border-b border-gray-800 flex-shrink-0">
+                                    <h3 className="font-semibold text-white flex items-center gap-2"><span className={`w-3 h-3 rounded-full bg-${statusConfig[status].color}-500`}></span>{status}<span className="ml-auto text-sm text-gray-500">{tasks.filter(t => t.status === status).length}</span></h3>
+                                </div>
+                                <div className="p-4 space-y-4 overflow-y-auto flex-1">
+                                    {tasks.filter(t => t.status === status).map(task => (
+                                        <TaskCard key={task.id} task={task} onEdit={handleOpenEditModal} onDelete={handleDelete} onDragStart={(e) => handleDragStart(e, task)} isDragging={draggedTask?.id === task.id} />
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </main>
+                <TaskEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveTask} taskToEdit={taskToEdit} campaigns={initialCampaigns} />
+            </div>
+        </div>
+    );
+}
+

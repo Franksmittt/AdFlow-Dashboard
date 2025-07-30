@@ -1,3 +1,4 @@
+// app/page.js
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -6,13 +7,13 @@ import { useAppContext } from './context/AppContext';
 import Link from 'next/link';
 
 // --- ICONS --- //
-const Target = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
-const CheckSquare = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>;
-const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
-const Upload = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>;
-const Download = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
-const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
-const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
+import Target from './components/icons/Target';
+import CheckSquare from './components/icons/CheckSquare';
+import Plus from './components/icons/Plus';
+import Upload from './components/icons/Upload';
+import Download from './components/icons/Download';
+import DollarSign from './components/icons/DollarSign';
+import Edit from './components/icons/Edit';
 
 
 // --- CONFIG --- //
@@ -34,7 +35,6 @@ const StatCard = ({ title, value, icon }) => (
     </div>
 );
 
-
 // --- MAIN DASHBOARD PAGE COMPONENT --- //
 export default function DashboardPage() {
     const { campaigns, tasks, notes, budgets, setCampaigns, setTasks, setNotes, setBudgets } = useAppContext();
@@ -42,13 +42,11 @@ export default function DashboardPage() {
     const fileInputRef = useRef(null);
 
     useEffect(() => {
-        // Set date and time on component mount
         const now = new Date();
         const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         setDateTime(now.toLocaleDateString('en-ZA', options));
     }, []);
 
-    // --- Data Handlers ---
     const handleExportAll = () => {
         const allData = { campaigns, tasks, notes, budgets };
         const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(allData, null, 2))}`;
@@ -60,7 +58,6 @@ export default function DashboardPage() {
 
     const handleImportAll = (event) => {
         if (!window.confirm("This will overwrite all existing data. Are you sure?")) return;
-        
         const file = event.target.files[0];
         if (!file) return;
 
@@ -81,21 +78,16 @@ export default function DashboardPage() {
                 alert("Failed to parse backup file.");
             }
         };
-        event.target.value = null; // Reset file input
+        event.target.value = null; 
     };
 
-    // --- Dynamic Calculations ---
     const activeCampaignsCount = campaigns.filter(c => c.status === 'Live').length;
     const tasksToDoCount = tasks.filter(t => t.status === 'To Do').length;
     
-    // Total budget allocated across all branches
     const totalAllocated = budgets.reduce((sum, camp) => sum + (camp.totalBudget || 0), 0);
-
-    // Calculate how many campaigns are in the "In Progress" or "Planning" stage
     const creativesInProgressCount = campaigns.filter(c => c.status === 'In Progress' || c.status === 'Planning').length;
-
-    const recentCampaigns = campaigns.slice(0, 5); // Show up to 5 recent campaigns
-    const upcomingTasks = tasks.filter(t => t.status !== 'Done').slice(0, 5); // Show up to 5 upcoming tasks
+    const recentCampaigns = campaigns.slice(0, 5);
+    const upcomingTasks = tasks.filter(t => t.status !== 'Done').slice(0, 5);
 
     return (
         <div className="font-sans antialiased text-gray-200">
@@ -106,7 +98,7 @@ export default function DashboardPage() {
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
                         <div>
                             <h2 className="text-3xl font-bold text-white">Dashboard</h2>
-                            <p className="text-gray-400 mt-1">{dateTime}, Alberton</p>
+                            <p className="text-gray-400 mt-1">{dateTime}</p>
                         </div>
                         <div className="flex items-center gap-2">
                             <button onClick={() => fileInputRef.current.click()} className="px-4 py-2.5 text-sm font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"><Upload className="w-4 h-4" /> Import All</button>

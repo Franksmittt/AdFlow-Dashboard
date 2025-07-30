@@ -1,19 +1,20 @@
+// app/layout.js
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AppProvider } from './context/AppContext'; // 1. Add this import
+import { AppProvider } from './context/AppContext';
+import { Toaster } from 'react-hot-toast'; // 1. Import Toaster
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
-
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
 export const metadata = {
-  title: "AdFlow Hub", // You can keep your title or use this one
+  title: "AdFlow Hub",
   description: "Your personal Facebook Ads command center.",
 };
 
@@ -23,8 +24,17 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {/* 2. Wrap the children with AppProvider */}
         <AppProvider>
+          {/* 2. Add the Toaster component here */}
+          <Toaster 
+            position="bottom-right"
+            toastOptions={{
+              style: {
+                background: '#333',
+                color: '#fff',
+              },
+            }}
+          />
           {children}
         </AppProvider>
       </body>
