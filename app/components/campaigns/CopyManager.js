@@ -1,7 +1,7 @@
 // app/components/campaigns/CopyManager.js
-
 "use client";
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 
 export default function CopyManager({ campaign, onSave }) {
     const [primaryText, setPrimaryText] = useState('');
@@ -11,6 +11,7 @@ export default function CopyManager({ campaign, onSave }) {
     useEffect(() => {
         setPrimaryText(campaign.primaryText || '');
         setHeadlines(campaign.headlines && campaign.headlines.length > 0 ? campaign.headlines : ['']);
+        setHasChanges(false); // Reset changes when campaign prop changes
     }, [campaign]);
 
     const handlePrimaryTextChange = (e) => {
@@ -37,11 +38,21 @@ export default function CopyManager({ campaign, onSave }) {
         setHasChanges(true);
     };
 
-    const handleSave = () => {
-        // Filter out any empty headlines before saving
+    const handleSave = async () => {
         const finalHeadlines = headlines.filter(h => h.trim() !== '');
-        onSave({ primaryText, headlines: finalHeadlines });
-        setHasChanges(false);
+        try {
+            await toast.promise(
+                onSave({ primaryText, headlines: finalHeadlines }),
+                {
+                    loading: 'Saving copy...',
+                    success: 'Copy saved successfully!',
+                    error: 'Failed to save copy.',
+                }
+            );
+            setHasChanges(false);
+        } catch (error) {
+            console.error("Error saving copy:", error);
+        }
     };
 
     return (
@@ -78,6 +89,7 @@ export default function CopyManager({ campaign, onSave }) {
                             onClick={() => removeHeadline(index)}
                             className="text-gray-500 hover:text-red-400 disabled:opacity-50"
                             disabled={headlines.length <= 1}
+                            aria-label="Remove headline"
                         >
                             &times;
                         </button>
@@ -93,11 +105,11 @@ export default function CopyManager({ campaign, onSave }) {
 
             {hasChanges && (
                 <div className="flex justify-end mt-6">
-                   <button 
+                   <button
                        onClick={handleSave}
                        className="px-5 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors"
                    >
-                       Save Copy
+                     Save Copy
                    </button>
                </div>
            )}

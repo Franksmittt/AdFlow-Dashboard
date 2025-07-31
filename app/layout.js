@@ -2,7 +2,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProvider } from './context/AppContext';
-import { Toaster } from 'react-hot-toast'; // 1. Import Toaster
+import { Toaster } from 'react-hot-toast';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,12 +21,12 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:px-4 focus:py-2 focus:m-2 focus:bg-yellow-400 focus:text-gray-900 focus:rounded-lg">
+          Skip to main content
+        </a>
         <AppProvider>
-          {/* 2. Add the Toaster component here */}
-          <Toaster 
+          <Toaster
             position="bottom-right"
             toastOptions={{
               style: {

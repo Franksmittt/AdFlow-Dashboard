@@ -34,7 +34,6 @@ export default async function TasksPage() {
         getTasks(),
         getCampaigns()
     ]);
-
     // Pass data to the Client Component
     return <TaskClientView initialTasks={initialTasks} initialCampaigns={initialCampaigns} />;
 }

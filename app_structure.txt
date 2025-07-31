@@ -6,33 +6,43 @@
 --------------------------------------------------------------------------------
 Path: C:\Users\shop\global-batteries-dashboard\app\layout.js
 --------------------------------------------------------------------------------
+// app/layout.js
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AppProvider } from './context/AppContext'; // 1. Add this import
+import { AppProvider } from './context/AppContext';
+import { Toaster } from 'react-hot-toast';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
-
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
 export const metadata = {
-  title: "AdFlow Hub", // You can keep your title or use this one
+  title: "AdFlow Hub",
   description: "Your personal Facebook Ads command center.",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {/* 2. Wrap the children with AppProvider */}
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:px-4 focus:py-2 focus:m-2 focus:bg-yellow-400 focus:text-gray-900 focus:rounded-lg">
+          Skip to main content
+        </a>
         <AppProvider>
+          <Toaster
+            position="bottom-right"
+            toastOptions={{
+              style: {
+                background: '#333',
+                color: '#fff',
+              },
+            }}
+          />
           {children}
         </AppProvider>
       </body>
@@ -45,24 +55,18 @@ export default function RootLayout({ children }) {
 --------------------------------------------------------------------------------
 Path: C:\Users\shop\global-batteries-dashboard\app\page.js
 --------------------------------------------------------------------------------
+// app/page.js
 "use client";
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import Sidebar from './components/Sidebar';
 import { useAppContext } from './context/AppContext';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
+import { z } from 'zod';
+import ConfirmationModal from './components/ui/ConfirmationModal';
+import SkeletonCard from './components/ui/SkeletonCard';
+import { Target, CheckSquare, Plus, Upload, Download, DollarSign, Edit } from './components/icons';
 
-// --- ICONS --- //
-const Target = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
-const CheckSquare = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>;
-const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
-const Upload = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>;
-const Download = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
-const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
-const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
-
-
-// --- CONFIG --- //
 const statusConfig = {
     "Planning": { text: "text-blue-400" },
     "In Progress": { text: "text-yellow-400" },
@@ -70,8 +74,7 @@ const statusConfig = {
     "Completed": { text: "text-gray-500" },
 };
 
-// --- REUSABLE COMPONENTS --- //
-const StatCard = ({ title, value, icon }) => (
+const StatCard = memo(({ title, value, icon }) => (
     <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
         <div className="flex justify-between items-center">
             <p className="text-sm font-medium text-gray-400">{title}</p>
@@ -79,86 +82,132 @@ const StatCard = ({ title, value, icon }) => (
         </div>
         <p className="text-3xl font-bold mt-2 text-white">{value}</p>
     </div>
-);
+));
+StatCard.displayName = 'StatCard';
 
+const importedDataSchema = z.object({
+    campaigns: z.array(z.object({ id: z.string().optional(), name: z.string(), status: z.string() })).optional(),
+    tasks: z.array(z.object({ id: z.string().optional(), text: z.string(), status: z.string() })).optional(),
+    notes: z.array(z.object({ id: z.string().optional(), title: z.string() })).optional(),
+    budgets: z.array(z.object({ id: z.string().optional(), name: z.string(), totalBudget: z.number() })).optional(),
+}).strict();
 
-// --- MAIN DASHBOARD PAGE COMPONENT --- //
 export default function DashboardPage() {
-    const { campaigns, tasks, notes, budgets, setCampaigns, setTasks, setNotes, setBudgets } = useAppContext();
+    const { campaigns, tasks, notes, budgets, setCampaigns, setTasks, setNotes, setBudgets, loading } = useAppContext();
     const [dateTime, setDateTime] = useState('');
     const fileInputRef = useRef(null);
+    const [isImportConfirmOpen, setImportConfirmOpen] = useState(false);
+    const [fileToImport, setFileToImport] = useState(null);
 
     useEffect(() => {
-        // Set date and time on component mount
-        const now = new Date();
-        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        setDateTime(now.toLocaleDateString('en-ZA', options));
+        const timer = setInterval(() => {
+            const now = new Date();
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            setDateTime(now.toLocaleDateString('en-ZA', options));
+        }, 1000);
+        return () => clearInterval(timer);
     }, []);
 
-    // --- Data Handlers ---
     const handleExportAll = () => {
         const allData = { campaigns, tasks, notes, budgets };
         const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(allData, null, 2))}`;
         const link = document.createElement("a");
         link.href = jsonString;
-        link.download = "adflow-hub-backup.json";
+        link.download = `adflow-hub-backup-${new Date().toISOString().slice(0,10)}.json`;
         link.click();
+        toast.success("All data exported successfully!");
     };
 
-    const handleImportAll = (event) => {
-        if (!window.confirm("This will overwrite all existing data. Are you sure?")) return;
-        
+    const handleImportFileSelect = (event) => {
         const file = event.target.files[0];
         if (!file) return;
+        handleExportAll();
+        toast.info("Created a backup of your current data just in case.");
+        setFileToImport(file);
+        setImportConfirmOpen(true);
+        event.target.value = null;
+    };
 
+    const executeImport = () => {
+        if (!fileToImport) return;
         const fileReader = new FileReader();
-        fileReader.readAsText(file, "UTF-8");
+        fileReader.readAsText(fileToImport, "UTF-8");
         fileReader.onload = e => {
             try {
                 const importedData = JSON.parse(e.target.result);
-                if (importedData.campaigns && importedData.tasks && importedData.notes && importedData.budgets) {
-                    setCampaigns(importedData.campaigns);
-                    setTasks(importedData.tasks);
-                    setNotes(importedData.notes);
-                    setBudgets(importedData.budgets);
-                } else {
-                    alert("Invalid backup file format.");
+                const result = importedDataSchema.safeParse(importedData);
+                if (!result.success) {
+                    const errorDetails = result.error.errors.map(err => `${err.path.join('.')} - ${err.message}`).join('; ');
+                    toast.error("Invalid backup file format. Details in console.");
+                    console.error("Import validation errors:", errorDetails);
+                    return;
                 }
+                if (result.data.campaigns) setCampaigns(result.data.campaigns);
+                if (result.data.tasks) setTasks(result.data.tasks);
+                if (result.data.notes) setNotes(result.data.notes);
+                if (result.data.budgets) setBudgets(result.data.budgets);
+                toast.success("Data imported successfully!");
             } catch (error) {
-                alert("Failed to parse backup file.");
+                toast.error("Failed to parse backup file.");
+                console.error("Error parsing imported file:", error);
             }
         };
-        event.target.value = null; // Reset file input
+        setImportConfirmOpen(false);
+        setFileToImport(null);
     };
 
-    // --- Dynamic Calculations ---
+    if (loading) {
+        return (
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10">
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
+                         <div>
+                            <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
+                            <div className="h-5 bg-gray-700 rounded w-64 animate-pulse"></div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <div className="h-11 bg-gray-700 rounded-lg w-32 animate-pulse"></div>
+                           <div className="h-11 bg-gray-700 rounded-lg w-32 animate-pulse"></div>
+                           <div className="h-11 bg-gray-700 rounded-lg w-40 animate-pulse"></div>
+                        </div>
+                    </header>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <SkeletonCard />
+                        <SkeletonCard />
+                        <SkeletonCard />
+                        <SkeletonCard />
+                    </div>
+                </main>
+            </div>
+        );
+    }
+    
     const activeCampaignsCount = campaigns.filter(c => c.status === 'Live').length;
     const tasksToDoCount = tasks.filter(t => t.status === 'To Do').length;
-    
-    // Total budget allocated across all branches
     const totalAllocated = budgets.reduce((sum, camp) => sum + (camp.totalBudget || 0), 0);
-
-    // Calculate how many campaigns are in the "In Progress" or "Planning" stage
     const creativesInProgressCount = campaigns.filter(c => c.status === 'In Progress' || c.status === 'Planning').length;
-
-    const recentCampaigns = campaigns.slice(0, 5); // Show up to 5 recent campaigns
-    const upcomingTasks = tasks.filter(t => t.status !== 'Done').slice(0, 5); // Show up to 5 upcoming tasks
+    const recentCampaigns = campaigns.slice(0, 5);
+    const upcomingTasks = tasks.filter(t => t.status !== 'Done').slice(0, 5);
 
     return (
         <div className="font-sans antialiased text-gray-200">
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
-                <main className="flex-1 p-6 md:p-8 lg:p-10 overflow-y-auto">
-                    {/* Header */}
+                <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10 overflow-y-auto">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
                         <div>
                             <h2 className="text-3xl font-bold text-white">Dashboard</h2>
-                            <p className="text-gray-400 mt-1">{dateTime}, Alberton</p>
+                            <p className="text-gray-400 mt-1">{dateTime}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={() => fileInputRef.current.click()} className="px-4 py-2.5 text-sm font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"><Upload className="w-4 h-4" /> Import All</button>
-                            <input type="file" ref={fileInputRef} onChange={handleImportAll} accept=".json" className="hidden" />
-                            <button onClick={handleExportAll} className="px-4 py-2.5 text-sm font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"><Download className="w-4 h-4" /> Export All</button>
+                            <button onClick={() => fileInputRef.current.click()} className="px-4 py-2.5 text-sm font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2" aria-label="Import All Data">
+                                <Upload className="w-4 h-4" /> Import All
+                            </button>
+                            <input type="file" ref={fileInputRef} onChange={handleImportFileSelect} accept=".json" className="hidden" />
+                            <button onClick={handleExportAll} className="px-4 py-2.5 text-sm font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2" aria-label="Export All Data">
+                                <Download className="w-4 h-4" /> Export All
+                            </button>
                             <Link href="/campaigns" className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap">
                                 <Plus className="w-5 h-5" />
                                 Create Campaign
@@ -166,7 +215,6 @@ export default function DashboardPage() {
                         </div>
                     </header>
 
-                    {/* Stat Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                         <StatCard title="Active Campaigns" value={activeCampaignsCount} icon={<Target className="w-6 h-6 text-blue-400" />} />
                         <StatCard title="Total Budget Allocated" value={`R ${totalAllocated.toLocaleString()}`} icon={<DollarSign className="w-6 h-6 text-green-400" />} />
@@ -174,13 +222,11 @@ export default function DashboardPage() {
                         <StatCard title="Tasks To-Do" value={tasksToDoCount} icon={<CheckSquare className="w-6 h-6 text-yellow-400" />} />
                     </div>
 
-                    {/* Main Grid: Campaigns & Tasks */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Campaigns Section */}
                         <section className="lg:col-span-2 bg-gray-900/70 border border-gray-800 rounded-xl p-6">
                             <h3 className="text-xl font-semibold text-white mb-4">Recent Campaigns</h3>
                             <div className="space-y-4">
-                                {recentCampaigns.map(campaign => (
+                                {recentCampaigns.length > 0 ? recentCampaigns.map(campaign => (
                                     <Link href={`/campaigns/${campaign.id}`} key={campaign.id} className="bg-gray-800/60 p-4 rounded-lg flex items-center justify-between hover:bg-gray-800 transition-colors cursor-pointer">
                                         <div>
                                             <p className="font-semibold text-white">{campaign.name}</p>
@@ -193,27 +239,32 @@ export default function DashboardPage() {
                                             </span>
                                         </div>
                                     </Link>
-                                ))}
+                                )) : <p className="text-gray-500">No campaigns found. Create one to get started!</p>}
                             </div>
                         </section>
 
-                        {/* Tasks Section */}
                         <section className="bg-gray-900/70 border border-gray-800 rounded-xl p-6">
                             <h3 className="text-xl font-semibold text-white mb-4">Upcoming Tasks</h3>
                             <div className="space-y-4">
-                                {upcomingTasks.map(task => (
+                                {upcomingTasks.length > 0 ? upcomingTasks.map(task => (
                                     <div key={task.id} className="bg-gray-800/60 p-4 rounded-lg hover:bg-gray-800 transition-colors">
                                         <p className="font-semibold text-white">{task.text}</p>
                                         <div className="flex items-center justify-between mt-2">
                                             <p className="text-xs text-blue-400 bg-blue-900/50 px-2 py-0.5 rounded-full">{task.campaign}</p>
                                         </div>
                                     </div>
-                                ))}
+                                )) : <p className="text-gray-500">No upcoming tasks.</p>}
                             </div>
                         </section>
                     </div>
                 </main>
             </div>
+            <ConfirmationModal
+                isOpen={isImportConfirmOpen}
+                onClose={() => setImportConfirmOpen(false)}
+                onConfirm={executeImport}
+                message="Importing data will overwrite all existing data. A backup has been automatically created. Are you sure you want to proceed?"
+            />
         </div>
     );
 }
@@ -226,23 +277,47 @@ Path: C:\Users\shop\global-batteries-dashboard\app\budgets\BudgetClientView.js
 --------------------------------------------------------------------------------
 // app/budgets/BudgetClientView.js
 "use client";
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Sidebar from '../components/Sidebar';
-import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
-// ✅ Import 'db' from our new central firebase file
-import { db } from '../context/firebase'; 
+import { z } from 'zod';
+import toast from 'react-hot-toast';
 
 // --- ICONS --- //
-const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
-const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
-const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
-const Trash2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
-const Store = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2V7"/></svg>;
+import Plus from '../components/icons/Plus';
+import DollarSign from '../components/icons/DollarSign';
+import Edit from '../components/icons/Edit';
+import Trash2 from '../components/icons/Trash2';
+import Store from '../components/icons/Store';
 
-// --- CONFIG --- //
+// --- Custom Confirmation Modal ---
+const ConfirmationModal = ({ isOpen, onClose, onConfirm, message }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+      <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-2xl m-4">
+        <p className="text-white mb-6 text-lg">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="px-5 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
+          <button onClick={onConfirm} className="px-5 py-2 text-sm font-semibold text-gray-950 bg-red-500 rounded-lg hover:bg-red-400 transition-colors">Confirm</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- CONFIG & SCHEMA --- //
 const BRANCHES = ["Alberton", "Vanderbijlpark", "Sasolburg", "National"];
+const budgetSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, { message: "Campaign Name is required." }).max(100),
+  branch: z.string(),
+  totalBudget: z.number().min(0, { message: "Total Budget must be a positive number." }),
+  dailyBudget: z.number().min(0, { message: "Daily Budget must be a positive number." }),
+  spent: z.number().min(0, { message: "Spent amount must be a positive number." }),
+  status: z.string(),
+  startDate: z.string(),
+});
 
 // --- REUSABLE COMPONENTS --- //
 const StatCard = ({ title, value, icon, color }) => (
@@ -255,22 +330,28 @@ const StatCard = ({ title, value, icon, color }) => (
     </div>
 );
 
-const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
+const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit, isSaving }) => {
     const [name, setName] = useState('');
     const [branch, setBranch] = useState(BRANCHES[0]);
     const [totalBudget, setTotalBudget] = useState('');
     const [dailyBudget, setDailyBudget] = useState('');
     const [spent, setSpent] = useState('');
+    const modalRef = useRef(null);
 
     useEffect(() => {
-        if (budgetToEdit) {
-            setName(budgetToEdit.name || '');
-            setBranch(budgetToEdit.branch || BRANCHES[0]);
-            setTotalBudget(budgetToEdit.totalBudget || '');
-            setDailyBudget(budgetToEdit.dailyBudget || '');
-            setSpent(budgetToEdit.spent || 0);
-        } else {
-            setName(''); setBranch(BRANCHES[0]); setTotalBudget(''); setDailyBudget(''); setSpent(0);
+        if (isOpen) {
+            if (budgetToEdit) {
+                setName(budgetToEdit.name || '');
+                setBranch(budgetToEdit.branch || BRANCHES[0]);
+                setTotalBudget(budgetToEdit.totalBudget || '');
+                setDailyBudget(budgetToEdit.dailyBudget || '');
+                setSpent(budgetToEdit.spent || 0);
+            } else {
+                setName(''); setBranch(BRANCHES[0]); setTotalBudget(''); setDailyBudget(''); setSpent(0);
+            }
+            if (modalRef.current) {
+              modalRef.current.focus();
+            }
         }
     }, [budgetToEdit, isOpen]);
 
@@ -278,24 +359,32 @@ const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const savedBudget = { 
-            ...budgetToEdit, 
-            id: budgetToEdit ? budgetToEdit.id : undefined, 
-            name, branch, 
-            totalBudget: parseFloat(totalBudget) || 0, 
-            dailyBudget: parseFloat(dailyBudget) || 0, 
-            spent: parseFloat(spent) || 0, 
-            status: budgetToEdit?.status || 'Planning', 
-            startDate: budgetToEdit?.startDate || new Date().toISOString().slice(0,10) 
+        const budgetData = {
+            ...budgetToEdit,
+            id: budgetToEdit?.id, name, branch,
+            totalBudget: parseFloat(totalBudget) || 0,
+            dailyBudget: parseFloat(dailyBudget) || 0,
+            spent: parseFloat(spent) || 0,
+            status: budgetToEdit?.status || 'Planning',
+            startDate: budgetToEdit?.startDate || new Date().toISOString().slice(0,10)
         };
-        onSave(savedBudget);
+        const result = budgetSchema.safeParse(budgetData);
+        if (!result.success) {
+            const errorMessages = result.error.errors.map(err => err.message).join('\n');
+            toast.error(`Validation failed:\n${errorMessages}`);
+            return;
+        }
+        onSave(result.data);
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={e => e.stopPropagation()}>
+            <div ref={modalRef} tabIndex="-1" className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={e => e.stopPropagation()}>
                 <form onSubmit={handleSubmit}>
-                    <div className="flex items-center justify-between p-6 border-b border-gray-800"><h3 className="text-xl font-semibold text-white">{budgetToEdit ? 'Edit Budget' : 'Add Campaign Budget'}</h3><button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button></div>
+                    <div className="flex items-center justify-between p-6 border-b border-gray-800">
+                       <h3 className="text-xl font-semibold text-white">{budgetToEdit ? 'Edit Budget' : 'Add Campaign Budget'}</h3>
+                      <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none" aria-label="Close modal">&times;</button>
+                    </div>
                     <div className="p-6 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div><label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">Campaign Name</label><input type="text" id="name" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
@@ -307,7 +396,12 @@ const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
                             <div><label htmlFor="spent" className="block text-sm font-medium text-gray-300 mb-1">Spent (R)</label><input type="number" id="spent" value={spent} onChange={e => setSpent(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
                         </div>
                     </div>
-                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2"><button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 rounded-lg">Cancel</button><button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg">Save Budget</button></div>
+                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 rounded-lg">Cancel</button>
+                        <button type="submit" disabled={isSaving} className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
+                            {isSaving ? 'Saving...' : 'Save Budget'}
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -315,44 +409,69 @@ const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
 };
 
 export default function BudgetClientView({ initialBudgets }) {
-    const { saveData, deleteData } = useAppContext();
-    const [budgets, setBudgets] = useState(initialBudgets);
+    // FIX: Removed local state and redundant listener. Now consumes global state from context.
+    const { budgets, saveData, deleteData, loading } = useAppContext();
     const [isModalOpen, setModalOpen] = useState(false);
     const [budgetToEdit, setBudgetToEdit] = useState(null);
-
-    useEffect(() => {
-        const unsubscribe = onSnapshot(collection(db, 'budgets'), (snapshot) => {
-            const updatedBudgets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setBudgets(updatedBudgets);
-        });
-
-        return () => unsubscribe();
-    }, []);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
+    const [budgetToDelete, setBudgetToDelete] = useState(null);
 
     const handleSaveBudget = async (savedBudget) => {
+        setIsSaving(true);
         try {
-            await saveData('budgets', savedBudget);
+            await toast.promise(
+                saveData('budgets', savedBudget),
+                {
+                    loading: 'Saving budget...',
+                    success: 'Budget saved successfully!',
+                    error: 'Failed to save budget.',
+                }
+            );
             setModalOpen(false);
         } catch (error) {
-            console.error("Error saving budget:", error);
-            alert("Failed to save budget.");
+            // Toast will handle the error message
+        } finally {
+            setIsSaving(false);
         }
     };
-    
+
     const handleAddClick = () => { setBudgetToEdit(null); setModalOpen(true); };
     const handleEditClick = (budget) => { setBudgetToEdit(budget); setModalOpen(true); };
-    
-    const handleDeleteClick = async (id) => { 
-        if(window.confirm('Are you sure you want to delete this budget entry?')) { 
-            await deleteData('budgets', id);
+
+    const handleDeleteClick = (id) => {
+        setBudgetToDelete(id);
+        setConfirmOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!budgetToDelete) return;
+        try {
+            await deleteData('budgets', budgetToDelete);
+            toast.success('Budget deleted.');
+        } catch (error) {
+            toast.error('Failed to delete budget.');
+        } finally {
+            setConfirmOpen(false);
+            setBudgetToDelete(null);
         }
     };
+    
+    if (loading) {
+        return (
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main className="flex-1 flex items-center justify-center text-white">
+                    <p>Loading Budgets...</p>
+                </main>
+            </div>
+        );
+    }
 
     const totalAllocated = budgets.reduce((sum, camp) => sum + (camp.totalBudget || 0), 0);
     const totalSpent = budgets.reduce((sum, camp) => sum + (camp.spent || 0), 0);
     const totalRemaining = totalAllocated - totalSpent;
     const activeDailySpend = budgets.filter(b => b.status === 'Live').reduce((sum, camp) => sum + (camp.dailyBudget || 0), 0);
-    
     const spendByBranch = budgets.reduce((acc, budget) => {
         const branch = budget.branch || 'Unassigned';
         if (!acc[branch]) acc[branch] = 0;
@@ -366,25 +485,24 @@ export default function BudgetClientView({ initialBudgets }) {
                 <Sidebar />
                 <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
-                        <div>
+                         <div>
                             <h2 className="text-3xl font-bold text-white">Budgets Dashboard</h2>
                             <p className="text-gray-400 mt-1">Your financial command center for all ad spend.</p>
-                        </div>
+                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center gap-2 whitespace-nowrap"><Plus className="w-5 h-5" />Add Budget</button>
+                            <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center gap-2 whitespace-nowrap" aria-label="Add New Budget"><Plus className="w-5 h-5" />Add Budget</button>
                         </div>
                     </header>
-                    
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                         <StatCard title="Total Allocated" value={`R ${totalAllocated.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-blue-900/50 text-blue-300" />
+                        <StatCard
+                            title="Total Allocated" value={`R ${totalAllocated.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-blue-900/50 text-blue-300" />
                         <StatCard title="Total Spent" value={`R ${totalSpent.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-yellow-900/50 text-yellow-300" />
                         <StatCard title="Total Remaining" value={`R ${totalRemaining.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-green-900/50 text-green-300" />
                         <StatCard title="Active Daily Spend" value={`R ${activeDailySpend.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-purple-900/50 text-purple-300" />
                     </div>
-
                     <div className="mb-8">
                         <h3 className="text-xl font-semibold text-white mb-4">Spend by Branch</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                             {Object.entries(spendByBranch).map(([branch, spend]) => (
                                 <div key={branch} className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
                                     <p className="text-sm font-medium text-gray-400 flex items-center gap-2"><Store className="w-4 h-4"/>{branch}</p>
@@ -393,17 +511,18 @@ export default function BudgetClientView({ initialBudgets }) {
                             ))}
                         </div>
                     </div>
-
-                    <div className="bg-gray-900/70 border border-gray-800 rounded-xl flex-1 overflow-auto">
+                     <div className="bg-gray-900/70 border border-gray-800 rounded-xl flex-1 overflow-auto">
                         <table className="w-full text-left">
-                            <thead className="sticky top-0 bg-gray-900/70 backdrop-blur-sm"><tr className="border-b border-gray-800">
-                                <th className="p-4 text-sm font-semibold text-gray-400">Campaign</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Branch</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Total Budget</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Spent</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Progress</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Actions</th>
-                            </tr></thead>
+                            <thead className="sticky top-0 bg-gray-900/70 backdrop-blur-sm">
+                                <tr className="border-b border-gray-800">
+                                    <th className="p-4 text-sm font-semibold text-gray-400">Campaign</th>
+                                    <th className="p-4 text-sm font-semibold text-gray-400">Branch</th>
+                                    <th className="p-4 text-sm font-semibold text-gray-400">Total Budget</th>
+                                    <th className="p-4 text-sm font-semibold text-gray-400">Spent</th>
+                                    <th className="p-4 text-sm font-semibold text-gray-400">Progress</th>
+                                    <th className="p-4 text-sm font-semibold text-gray-400">Actions</th>
+                                </tr>
+                            </thead>
                             <tbody className="divide-y divide-gray-800">
                                 {budgets.map(budget => {
                                     const progress = budget.totalBudget > 0 ? ((budget.spent || 0) / budget.totalBudget) * 100 : 0;
@@ -413,242 +532,30 @@ export default function BudgetClientView({ initialBudgets }) {
                                             <td className="p-4 text-gray-300">{budget.branch}</td>
                                             <td className="p-4 text-gray-300">R {budget.totalBudget?.toLocaleString() || 0}</td>
                                             <td className="p-4 text-yellow-300">R {budget.spent?.toLocaleString() || 0}</td>
-                                            <td className="p-4"><div className="w-full bg-gray-700 rounded-full h-2.5"><div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div></td>
-                                            <td className="p-4"><div className="flex gap-4">
-                                                <button onClick={() => handleEditClick(budget)} className="text-gray-400 hover:text-white"><Edit className="w-4 h-4" /></button>
-                                                <button onClick={() => handleDeleteClick(budget.id)} className="text-gray-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-                                            </div></td>
-                                        </tr>
+                                            <td className="p-4">
+                                                <div className="w-full bg-gray-700 rounded-full h-2.5">
+                                                    <div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: `${Math.min(progress, 100)}%` }}></div>
+                                                </div>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex gap-4">
+                                                    <button onClick={() => handleEditClick(budget)} className="text-gray-400 hover:text-white" aria-label={`Edit ${budget.name}`}><Edit className="w-4 h-4" /></button>
+                                                    <button onClick={() => handleDeleteClick(budget.id)} className="text-gray-400 hover:text-red-400" aria-label={`Delete ${budget.name}`}><Trash2 className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                      </tr>
                                     );
                                 })}
                             </tbody>
                         </table>
                     </div>
                 </main>
-                <BudgetEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveBudget} budgetToEdit={budgetToEdit} />
-            </div>
-        </div>
-    );
-}
-
-│   │   ├── BudgetView.js
-
---------------------------------------------------------------------------------
-Path: C:\Users\shop\global-batteries-dashboard\app\budgets\BudgetView.js
---------------------------------------------------------------------------------
-// app/budgets/BudgetView.js
-"use client";
-
-import React, { useState, useEffect } from 'react';
-import { useAppContext } from '../context/AppContext';
-import Sidebar from '../components/Sidebar';
-import { getFirestore, collection, onSnapshot, initializeApp, getApps } from 'firebase/firestore';
-
-// --- ICONS (needed for components below) --- //
-const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
-const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
-const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
-const Trash2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
-const Store = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2V7"/></svg>;
-
-// --- CONFIG --- //
-const BRANCHES = ["Alberton", "Vanderbijlpark", "Sasolburg", "National"];
-
-// --- REUSABLE COMPONENTS --- //
-const StatCard = ({ title, value, icon, color }) => (
-    <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
-        <div className="flex justify-between items-center">
-            <p className="text-sm font-medium text-gray-400">{title}</p>
-            <div className={`p-2 rounded-lg ${color}`}>{icon}</div>
-        </div>
-        <p className="text-3xl font-bold mt-2 text-white">{value}</p>
-    </div>
-);
-
-const BudgetEditorModal = ({ isOpen, onClose, onSave, budgetToEdit }) => {
-    const [name, setName] = useState('');
-    const [branch, setBranch] = useState(BRANCHES[0]);
-    const [totalBudget, setTotalBudget] = useState('');
-    const [dailyBudget, setDailyBudget] = useState('');
-    const [spent, setSpent] = useState('');
-
-    useEffect(() => {
-        if (budgetToEdit) {
-            setName(budgetToEdit.name || '');
-            setBranch(budgetToEdit.branch || BRANCHES[0]);
-            setTotalBudget(budgetToEdit.totalBudget || '');
-            setDailyBudget(budgetToEdit.dailyBudget || '');
-            setSpent(budgetToEdit.spent || 0);
-        } else {
-            setName(''); setBranch(BRANCHES[0]); setTotalBudget(''); setDailyBudget(''); setSpent(0);
-        }
-    }, [budgetToEdit, isOpen]);
-
-    if (!isOpen) return null;
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        const savedBudget = { 
-            ...budgetToEdit, 
-            id: budgetToEdit ? budgetToEdit.id : undefined, 
-            name, branch, 
-            totalBudget: parseFloat(totalBudget) || 0, 
-            dailyBudget: parseFloat(dailyBudget) || 0, 
-            spent: parseFloat(spent) || 0, 
-            status: budgetToEdit?.status || 'Planning', 
-            startDate: budgetToEdit?.startDate || new Date().toISOString().slice(0,10) 
-        };
-        onSave(savedBudget);
-    };
-    
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={e => e.stopPropagation()}>
-                <form onSubmit={handleSubmit}>
-                    <div className="flex items-center justify-between p-6 border-b border-gray-800"><h3 className="text-xl font-semibold text-white">{budgetToEdit ? 'Edit Budget' : 'Add Campaign Budget'}</h3><button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button></div>
-                    <div className="p-6 space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div><label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">Campaign Name</label><input type="text" id="name" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
-                            <div><label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-1">Branch</label><select id="branch" value={branch} onChange={e => setBranch(e.target.value)} className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map(b => <option key={b}>{b}</option>)}</select></div>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4">
-                            <div><label htmlFor="totalBudget" className="block text-sm font-medium text-gray-300 mb-1">Total (R)</label><input type="number" id="totalBudget" value={totalBudget} onChange={e => setTotalBudget(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
-                            <div><label htmlFor="dailyBudget" className="block text-sm font-medium text-gray-300 mb-1">Daily (R)</label><input type="number" id="dailyBudget" value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
-                            <div><label htmlFor="spent" className="block text-sm font-medium text-gray-300 mb-1">Spent (R)</label><input type="number" id="spent" value={spent} onChange={e => setSpent(e.target.value)} required className="w-full bg-gray-800 border-gray-700 rounded-lg p-2 text-white" /></div>
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2"><button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 rounded-lg">Cancel</button><button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg">Save Budget</button></div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-
-export default function BudgetClientView({ initialBudgets }) {
-    const { saveData, deleteData } = useAppContext();
-    const [budgets, setBudgets] = useState(initialBudgets);
-    const [isModalOpen, setModalOpen] = useState(false);
-    const [budgetToEdit, setBudgetToEdit] = useState(null);
-
-    useEffect(() => {
-        // We need to re-initialize firebase on the client
-        const firebaseConfig = {
-            apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-            authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-            projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-            storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-            messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-            appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
-        };
-        const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-        const db = getFirestore(app);
-        
-        const unsubscribe = onSnapshot(collection(db, 'budgets'), (snapshot) => {
-            const updatedBudgets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setBudgets(updatedBudgets);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    const handleSaveBudget = async (savedBudget) => {
-        try {
-            await saveData('budgets', savedBudget);
-            setModalOpen(false);
-        } catch (error) {
-            console.error("Error saving budget:", error);
-            alert("Failed to save budget.");
-        }
-    };
-    
-    const handleAddClick = () => { setBudgetToEdit(null); setModalOpen(true); };
-    const handleEditClick = (budget) => { setBudgetToEdit(budget); setModalOpen(true); };
-    
-    const handleDeleteClick = async (id) => { 
-        if(window.confirm('Are you sure you want to delete this budget entry?')) { 
-            await deleteData('budgets', id);
-        }
-    };
-
-    const totalAllocated = budgets.reduce((sum, camp) => sum + (camp.totalBudget || 0), 0);
-    const totalSpent = budgets.reduce((sum, camp) => sum + (camp.spent || 0), 0);
-    const totalRemaining = totalAllocated - totalSpent;
-    const activeDailySpend = budgets.reduce((sum, camp) => sum + (camp.dailyBudget || 0), 0);
-    
-    const spendByBranch = budgets.reduce((acc, budget) => {
-        const branch = budget.branch || 'Unassigned';
-        if (!acc[branch]) acc[branch] = 0;
-        acc[branch] += budget.spent || 0;
-        return acc;
-    }, {});
-
-    return (
-        <div className="font-sans antialiased text-gray-200">
-            <div className="flex h-screen bg-gray-950">
-                <Sidebar />
-                <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
-                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
-                        <div>
-                            <h2 className="text-3xl font-bold text-white">Budgets Dashboard</h2>
-                            <p className="text-gray-400 mt-1">Your financial command center for all ad spend.</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center gap-2 whitespace-nowrap"><Plus className="w-5 h-5" />Add Budget</button>
-                        </div>
-                    </header>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                         <StatCard title="Total Allocated" value={`R ${totalAllocated.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-blue-900/50 text-blue-300" />
-                        <StatCard title="Total Spent" value={`R ${totalSpent.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-yellow-900/50 text-yellow-300" />
-                        <StatCard title="Total Remaining" value={`R ${totalRemaining.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-green-900/50 text-green-300" />
-                        <StatCard title="Active Daily Spend" value={`R ${activeDailySpend.toLocaleString()}`} icon={<DollarSign className="w-6 h-6" />} color="bg-purple-900/50 text-purple-300" />
-                    </div>
-
-                    <div className="mb-8">
-                        <h3 className="text-xl font-semibold text-white mb-4">Spend by Branch</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                            {Object.entries(spendByBranch).map(([branch, spend]) => (
-                                <div key={branch} className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
-                                    <p className="text-sm font-medium text-gray-400 flex items-center gap-2"><Store className="w-4 h-4"/>{branch}</p>
-                                    <p className="text-3xl font-bold mt-2 text-white">R {spend.toLocaleString()}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="bg-gray-900/70 border border-gray-800 rounded-xl flex-1 overflow-auto">
-                        <table className="w-full text-left">
-                            <thead className="sticky top-0 bg-gray-900/70 backdrop-blur-sm"><tr className="border-b border-gray-800">
-                                <th className="p-4 text-sm font-semibold text-gray-400">Campaign</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Branch</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Total Budget</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Spent</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Progress</th>
-                                <th className="p-4 text-sm font-semibold text-gray-400">Actions</th>
-                            </tr></thead>
-                            <tbody className="divide-y divide-gray-800">
-                                {budgets.map(budget => {
-                                    const progress = budget.totalBudget > 0 ? ((budget.spent || 0) / budget.totalBudget) * 100 : 0;
-                                    return (
-                                        <tr key={budget.id} className="hover:bg-gray-800/60 transition-colors">
-                                            <td className="p-4 font-medium text-white">{budget.name}</td>
-                                            <td className="p-4 text-gray-300">{budget.branch}</td>
-                                            <td className="p-4 text-gray-300">R {budget.totalBudget?.toLocaleString() || 0}</td>
-                                            <td className="p-4 text-yellow-300">R {budget.spent?.toLocaleString() || 0}</td>
-                                            <td className="p-4"><div className="w-full bg-gray-700 rounded-full h-2.5"><div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div></td>
-                                            <td className="p-4"><div className="flex gap-2">
-                                                <button onClick={() => handleEditClick(budget)} className="text-gray-400 hover:text-white"><Edit className="w-4 h-4" /></button>
-                                                <button onClick={() => handleDeleteClick(budget.id)} className="text-gray-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-                                            </div></td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </main>
-                <BudgetEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveBudget} budgetToEdit={budgetToEdit} />
+                <BudgetEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveBudget} budgetToEdit={budgetToEdit} isSaving={isSaving} />
+                <ConfirmationModal
+                    isOpen={isConfirmOpen}
+                    onClose={() => setConfirmOpen(false)}
+                    onConfirm={confirmDelete}
+                    message="Are you sure you want to delete this budget entry?" />
             </div>
         </div>
     );
@@ -661,9 +568,8 @@ Path: C:\Users\shop\global-batteries-dashboard\app\budgets\page.js
 --------------------------------------------------------------------------------
 // app/budgets/page.js
 import BudgetClientView from './BudgetClientView';
-import { getFirestore, collection, getDocs, orderBy, query } from 'firebase/firestore';
-// ✅ Import 'db' from our new central firebase file
 import { db } from '../context/firebase';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 
 // This is a server-side function to fetch the initial list of budgets.
 // It runs on the server, not in the browser.
@@ -672,9 +578,10 @@ async function getBudgets() {
         const budgetsQuery = query(collection(db, 'budgets'), orderBy('startDate', 'desc'));
         const budgetSnapshot = await getDocs(budgetsQuery);
         // We need to serialize the data to pass it from a Server Component to a Client Component.
-        const budgetList = budgetSnapshot.docs.map(doc => ({ 
-            id: doc.id, 
-            ...doc.data() 
+        const budgetList = budgetSnapshot.docs.map(doc => ({
+            id: doc.id,
+            // FIX: Corrected syntax from .doc.data() to the spread operator ...doc.data()
+            ...doc.data()
         }));
         return budgetList;
     } catch (error) {
@@ -700,19 +607,20 @@ Path: C:\Users\shop\global-batteries-dashboard\app\campaigns\CampaignClientView.
 --------------------------------------------------------------------------------
 // app/campaigns/CampaignClientView.js
 "use client";
-
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from 'next/link';
-import Image from 'next/image'; // Import the next/image component
+import Image from 'next/image';
 import Sidebar from "../components/Sidebar";
 import { useAppContext } from "../context/AppContext";
-import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
-import { app } from '../context/firebase';
+import toast from 'react-hot-toast';
+import { z } from 'zod';
 
 // --- ICONS & CONFIG --- //
-const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14" /><path d="M12 5v14" /></svg>;
-const List = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="2" y1="6" x2="22" y2="6" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="2" y1="18" x2="22" y2="18" /></svg>;
-const Trello = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><rect width="8" height="7" x="7" y="7" rx="2" ry="2" /><rect width="8" height="7" x="13" y="13" rx="2" ry="2" /></svg>;
+// FIX: Removed inline SVG definition and now import from the central icon component.
+import Plus from '../components/icons/Plus';
+import List from '../components/icons/List';
+import Trello from '../components/icons/Trello';
+
 const BRANCHES = ["Alberton", "Vanderbijlpark", "Sasolburg", "National"];
 const KANBAN_COLUMNS = ["Planning", "In Progress", "Live", "Completed"];
 const statusConfig = {
@@ -724,6 +632,48 @@ const statusConfig = {
 const AD_FORMATS = ["1:1", "4:5", "9:16"];
 const OBJECTIVES = ["Sales", "Leads", "Brand Awareness", "Engagement"];
 
+// Zod Schema for Campaign Validation
+const campaignSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, { message: "Campaign name is required." }),
+  branch: z.enum(BRANCHES),
+  objective: z.enum(OBJECTIVES),
+  startDate: z.string().min(1, { message: "Start date is required." }),
+  endDate: z.string().min(1, { message: "End date is required." }),
+  primaryText: z.string().optional(),
+  headlines: z.array(z.string()),
+  visuals: z.object({
+    "1:1": z.string().nullable(),
+    "4:5": z.string().nullable(),
+    "9:16": z.string().nullable(),
+  }),
+  targetValue: z.number().min(0).optional(),
+  budgetId: z.string().optional(),
+  status: z.enum(KANBAN_COLUMNS),
+  checklist: z.object({
+    primaryText: z.boolean(),
+    headlines: z.boolean(),
+    visuals: z.boolean(),
+    targeting: z.boolean(),
+    budget: z.boolean(),
+  }),
+});
+
+// --- Custom Confirmation Modal ---
+const ConfirmationModal = ({ isOpen, onClose, onConfirm, message }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+      <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-2xl m-4">
+        <p className="text-white mb-6 text-lg">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="px-5 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
+          <button onClick={onConfirm} className="px-5 py-2 text-sm font-semibold text-gray-950 bg-red-500 rounded-lg hover:bg-red-400 transition-colors">Confirm</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- SUB-COMPONENTS --- //
 const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets }) => {
@@ -737,6 +687,7 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
     const [visuals, setVisuals] = useState({ "1:1": null, "4:5": null, "9:16": null });
     const [targetValue, setTargetValue] = useState("");
     const [budgetId, setBudgetId] = useState("");
+    const modalRef = useRef(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -747,42 +698,77 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
                 setStartDate(campaignToEdit.startDate || "");
                 setEndDate(campaignToEdit.endDate || "");
                 setPrimaryText(campaignToEdit.primaryText || "");
-                setHeadlines(campaignToEdit.headlines || [""]);
+                setHeadlines(campaignToEdit.headlines?.length ? campaignToEdit.headlines : [""]);
                 setVisuals(campaignToEdit.visuals || { "1:1": null, "4:5": null, "9:16": null });
                 setTargetValue(campaignToEdit.targetValue || "");
                 setBudgetId(campaignToEdit.budgetId || "");
             } else {
-                // This block now runs correctly when creating a new campaign
-                setName(""); setBranch(BRANCHES[0]); setObjective(OBJECTIVES[0]); setStartDate(""); setEndDate(""); setPrimaryText(""); setHeadlines([""]); setVisuals({ "1:1": null, "4:5": null, "9:16": null }); setTargetValue(""); setBudgetId("");
+                // Reset form for new campaign
+                setName(""); setBranch(BRANCHES[0]); setObjective(OBJECTIVES[0]); setStartDate(""); setEndDate(""); setPrimaryText(""); setHeadlines([""]);
+                setVisuals({ "1:1": null, "4:5": null, "9:16": null }); setTargetValue(""); setBudgetId("");
+            }
+            if (modalRef.current) {
+                modalRef.current.focus();
             }
         }
-    }, [campaignToEdit, isOpen]); // ✅ FIX: Added `isOpen` to the dependency array
+    }, [campaignToEdit, isOpen]);
+    
+    // FIX: Add cleanup for blob URLs created by file previews
+    useEffect(() => {
+        return () => {
+            Object.values(visuals).forEach(url => {
+                if (url && url.startsWith('blob:')) {
+                    URL.revokeObjectURL(url);
+                }
+            });
+        };
+    }, [visuals]);
 
     if (!isOpen) return null;
 
     const handleSubmit = (e) => {
         e.preventDefault();
         const checklist = {
-            primaryText: !!primaryText, headlines: headlines.some(h => h),
+            primaryText: !!primaryText, headlines: headlines.some(h => h.trim() !== ''),
             visuals: Object.values(visuals).some(v => v), targeting: !!targetValue, budget: !!budgetId,
         };
         const savedCampaign = {
             ...campaignToEdit, id: campaignToEdit?.id, name, branch, objective,
-            startDate, endDate, primaryText, headlines, visuals,
+            startDate, endDate, primaryText, headlines: headlines.filter(h => h.trim() !== ''), visuals,
             targetValue: parseFloat(targetValue) || 0, budgetId, checklist,
             status: campaignToEdit?.status || "Planning",
         };
-        onSave(savedCampaign);
+
+        const result = campaignSchema.safeParse(savedCampaign);
+        if (!result.success) {
+            const errorMessages = result.error.errors.map(err => err.message).join('\n');
+            toast.error(`Validation failed:\n${errorMessages}`);
+            return;
+        }
+
+        onSave(result.data);
         onClose();
     };
-    
+
     const handleVisualUpload = (format, e) => {
         const file = e.target.files[0];
         if (file) {
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime'];
+            if (!allowedTypes.includes(file.type)) {
+                toast.error(`Unsupported file type for ${format}. Please use JPEG, PNG, GIF, or MP4/MOV.`);
+                return;
+            }
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            if (file.size > maxSize) {
+                toast.error(`File size exceeds 10MB limit for ${format}.`);
+                return;
+            }
             setVisuals((prev) => ({ ...prev, [format]: URL.createObjectURL(file) }));
         }
     };
+
     const addHeadline = () => setHeadlines((prev) => [...prev, ""]);
+    
     const updateHeadline = (index, value) => {
         const newHeadlines = [...headlines];
         newHeadlines[index] = value;
@@ -791,11 +777,11 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4">
+            <div ref={modalRef} tabIndex="-1" className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={e => e.stopPropagation()}>
                 <form onSubmit={handleSubmit}>
                     <div className="flex items-center justify-between p-6 border-b border-gray-800">
                         <h3 className="text-xl font-semibold text-white">{campaignToEdit ? "Edit Campaign" : "Create New Campaign"}</h3>
-                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none" aria-label="Close modal">&times;</button>
                     </div>
                     <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                         <div><label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">Campaign Name</label><input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div>
@@ -816,7 +802,7 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
                         <div className="grid grid-cols-2 gap-4"><div><label htmlFor="startDate" className="block text-sm font-medium text-gray-300 mb-1">Start Date</label><input type="date" id="startDate" value={startDate} onChange={(e) => setStartDate(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div><div><label htmlFor="endDate" className="block text-sm font-medium text-gray-300 mb-1">End Date</label><input type="date" id="endDate" value={endDate} onChange={(e) => setEndDate(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div></div>
                         <div><label htmlFor="primaryText" className="block text-sm font-medium text-gray-300 mb-1">Primary Text</label><textarea id="primaryText" value={primaryText} onChange={(e) => setPrimaryText(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" rows="4" /></div>
                         <div><label className="block text-sm font-medium text-gray-300 mb-1">Headlines</label>{headlines.map((headline, index) => (<input key={index} type="text" value={headline} onChange={(e) => updateHeadline(index, e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white mb-2" placeholder={`Headline ${index + 1}`} />))}<button type="button" onClick={addHeadline} className="text-yellow-400 hover:text-yellow-300 text-sm">+ Add Headline</button></div>
-                        <div><label className="block text-sm font-medium text-gray-300 mb-1">Visuals (Local Preview)</label>{AD_FORMATS.map((format) => (<div key={format} className="mb-2"><label className="block text-sm text-gray-400">{format} Visual</label><input type="file" accept="image/*" onChange={(e) => handleVisualUpload(format, e)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /><div className="relative w-32 h-32 mt-2">{visuals[format] && (<Image src={visuals[format]} alt={`${format} visual`} fill className="object-cover rounded-md" />)}</div></div>))}</div>
+                        <div><label className="block text-sm font-medium text-gray-300 mb-1">Visuals (Local Preview)</label>{AD_FORMATS.map((format) => (<div key={format} className="mb-2"><label className="block text-sm text-gray-400">{format} Visual</label><input type="file" accept="image/*,video/*" onChange={(e) => handleVisualUpload(format, e)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /><div className="relative w-32 h-32 mt-2">{visuals[format] && (<Image src={visuals[format]} alt={`${format} visual`} fill className="object-cover rounded-md" />)}</div></div>))}</div>
                         <div><label htmlFor="targetValue" className="block text-sm font-medium text-gray-300 mb-1">Target Value</label><input type="number" id="targetValue" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div>
                     </div>
                     <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
@@ -833,9 +819,7 @@ const CampaignListView = ({ campaigns, onEdit, onDelete }) => (
     <div className="bg-gray-900/70 border border-gray-800 rounded-xl flex-1 overflow-auto">
         <table className="w-full text-left">
             <thead className="sticky top-0 bg-gray-900/70 backdrop-blur-sm">
-                <tr className="border-b border-gray-800">
-                    <th className="p-4 text-sm font-semibold text-gray-400">Name</th><th className="p-4 text-sm font-semibold text-gray-400">Branch</th><th className="p-4 text-sm font-semibold text-gray-400">Objective</th><th className="p-4 text-sm font-semibold text-gray-400">Status</th><th className="p-4 text-sm font-semibold text-gray-400">Progress</th><th className="p-4 text-sm font-semibold text-gray-400">Actions</th>
-                </tr>
+                <tr className="border-b border-gray-800"><th className="p-4 text-sm font-semibold text-gray-400">Name</th><th className="p-4 text-sm font-semibold text-gray-400">Branch</th><th className="p-4 text-sm font-semibold text-gray-400">Objective</th><th className="p-4 text-sm font-semibold text-gray-400">Status</th><th className="p-4 text-sm font-semibold text-gray-400">Progress</th><th className="p-4 text-sm font-semibold text-gray-400">Actions</th></tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
                 {campaigns.map((campaign) => {
@@ -847,7 +831,12 @@ const CampaignListView = ({ campaigns, onEdit, onDelete }) => (
                             <td className="p-4 text-sm text-gray-400">{campaign.objective}</td>
                             <td className="p-4"><span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig[campaign.status]?.text} ${statusConfig[campaign.status]?.bg}`}>{campaign.status}</span></td>
                             <td className="p-4"><div className="w-24 bg-gray-700 rounded-full h-2.5"><div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div></td>
-                            <td className="p-4"><div className="flex gap-4"><button onClick={() => onEdit(campaign)} className="text-gray-400 hover:text-yellow-300 transition-colors">Edit</button><button onClick={() => onDelete(campaign.id)} className="text-gray-400 hover:text-red-400 transition-colors">Delete</button></div></td>
+                            <td className="p-4">
+                                <div className="flex gap-4">
+                                    <button onClick={() => onEdit(campaign)} className="text-gray-400 hover:text-yellow-300 transition-colors" aria-label={`Edit ${campaign.name}`}>Edit</button>
+                                    <button onClick={() => onDelete(campaign.id)} className="text-gray-400 hover:text-red-400 transition-colors" aria-label={`Delete ${campaign.name}`}>Delete</button>
+                                </div>
+                            </td>
                         </tr>
                     );
                 })}
@@ -880,35 +869,80 @@ const CampaignKanbanView = ({ campaigns, onDragStart, onDrop, draggedCampaign })
 
 // --- MAIN CLIENT COMPONENT --- //
 export default function CampaignClientView({ initialCampaigns, initialBudgets }) {
-    const { saveData, deleteData } = useAppContext();
-    const [campaigns, setCampaigns] = useState(initialCampaigns);
+    // FIX: Removed local state and redundant listener. Now consumes global state from context.
+    const { campaigns, budgets, saveData, deleteData, loading } = useAppContext();
     const [isModalOpen, setModalOpen] = useState(false);
     const [campaignToEdit, setCampaignToEdit] = useState(null);
     const [view, setView] = useState("list");
     const [draggedCampaign, setDraggedCampaign] = useState(null);
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
+    const [campaignToDelete, setCampaignToDelete] = useState(null);
+    
+    const handleSaveCampaign = async (savedCampaign) => {
+        try {
+            await toast.promise(
+                saveData('campaigns', savedCampaign),
+                {
+                    loading: 'Saving campaign...',
+                    success: 'Campaign saved successfully!',
+                    error: 'Failed to save campaign.',
+                }
+            );
+            setModalOpen(false);
+        } catch (error) {
+            console.error("Error saving campaign:", error);
+        }
+    };
 
-    useEffect(() => {
-        const db = getFirestore(app);
-        const unsubscribe = onSnapshot(collection(db, 'campaigns'), (snapshot) => {
-            const updatedCampaigns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setCampaigns(updatedCampaigns);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    const handleSaveCampaign = async (savedCampaign) => { await saveData('campaigns', savedCampaign); setModalOpen(false); };
     const handleAddClick = () => { setCampaignToEdit(null); setModalOpen(true); };
     const handleEditClick = (campaign) => { setCampaignToEdit(campaign); setModalOpen(true); };
-    const handleDeleteClick = async (id) => { if (window.confirm("Are you sure?")) { await deleteData('campaigns', id); } };
+
+    const handleDeleteClick = (id) => {
+        setCampaignToDelete(id);
+        setConfirmOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!campaignToDelete) return;
+        try {
+            await deleteData('campaigns', campaignToDelete);
+            toast.success('Campaign deleted successfully!');
+        } catch (error) {
+            toast.error('Failed to delete campaign.');
+            console.error("Error deleting campaign:", error);
+        } finally {
+            setConfirmOpen(false);
+            setCampaignToDelete(null);
+        }
+    };
+
     const handleDragStart = (e, campaign) => { setDraggedCampaign(campaign); e.dataTransfer.effectAllowed = "move"; };
+    
     const handleDrop = async (e, newStatus) => {
         e.preventDefault();
         if (draggedCampaign && draggedCampaign.status !== newStatus) {
             const updatedCampaign = { ...draggedCampaign, status: newStatus };
-            await saveData('campaigns', updatedCampaign);
+            try {
+                await saveData('campaigns', updatedCampaign);
+                toast.success(`Campaign status updated to ${newStatus}!`);
+            } catch (error) {
+                console.error("Error updating campaign status:", error);
+                toast.error('Failed to update campaign status.');
+            }
         }
         setDraggedCampaign(null);
     };
+
+    if (loading) {
+        return (
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main className="flex-1 flex items-center justify-center text-white">
+                    <p>Loading Campaigns...</p>
+                </main>
+            </div>
+        );
+    }
 
     return (
         <div className="font-sans antialiased text-gray-200">
@@ -916,21 +950,21 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
                 <Sidebar />
                 <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
-                        <div>
+                         <div>
                             <h2 className="text-3xl font-bold text-white">Campaigns</h2>
                             <p className="text-gray-400 mt-1">Manage your Facebook ad campaigns across all stores.</p>
-                        </div>
+                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors flex items-center gap-2">
-                                <Plus className="w-5 h-5" /> Create Campaign
+                            <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors flex items-center gap-2" aria-label="Create New Campaign">
+                                 <Plus className="w-5 h-5" /> Create Campaign
                             </button>
                         </div>
                     </header>
-                    <div className="flex items-center bg-gray-800 rounded-lg p-1 mb-8 w-min flex-shrink-0">
-                        <button onClick={() => setView("list")} className={`px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-colors ${view === "list" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`}>
+                     <div className="flex items-center bg-gray-800 rounded-lg p-1 mb-8 w-min flex-shrink-0">
+                        <button onClick={() => setView("list")} className={`px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-colors ${view === "list" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`} aria-label="View as List">
                             <List className="w-4 h-4" /> List
                         </button>
-                        <button onClick={() => setView("kanban")} className={`px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-colors ${view === "kanban" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`}>
+                        <button onClick={() => setView("kanban")} className={`px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-colors ${view === "kanban" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`} aria-label="View as Kanban Board">
                             <Trello className="w-4 h-4" /> Kanban
                         </button>
                     </div>
@@ -939,7 +973,12 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
                     ) : (
                         <CampaignKanbanView campaigns={campaigns} onDragStart={handleDragStart} onDrop={handleDrop} draggedCampaign={draggedCampaign} />
                     )}
-                    <CampaignEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveCampaign} campaignToEdit={campaignToEdit} budgets={initialBudgets} />
+                     <CampaignEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveCampaign} campaignToEdit={campaignToEdit} budgets={budgets} />
+                    <ConfirmationModal
+                        isOpen={isConfirmOpen}
+                        onClose={() => setConfirmOpen(false)}
+                        onConfirm={confirmDelete}
+                        message="Are you sure you want to delete this campaign?" />
                 </main>
             </div>
         </div>
@@ -954,13 +993,16 @@ Path: C:\Users\shop\global-batteries-dashboard\app\campaigns\page.js
 // app/campaigns/page.js
 import CampaignClientView from './CampaignClientView';
 import { getFirestore, collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { db } from '../context/firebase'; // Using our central firebase instance
+import { db } from '../context/firebase';
 
 // Server-side function to get initial campaigns
 async function getCampaigns() {
     try {
+        // IMPORTANT: Firestore orderBy queries require an index.
+        // If you encounter errors, check your Firebase console for a link to create the index for 'campaigns' on 'startDate' (desc).
         const campaignsQuery = query(collection(db, 'campaigns'), orderBy('startDate', 'desc'));
         const snapshot = await getDocs(campaignsQuery);
+        // FIX: Corrected syntax from .doc.data() to the spread operator ...doc.data()
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
         console.error("Failed to fetch campaigns on server:", error);
@@ -972,6 +1014,7 @@ async function getCampaigns() {
 async function getBudgets() {
     try {
         const snapshot = await getDocs(collection(db, 'budgets'));
+        // FIX: Corrected syntax from .doc.data() to the spread operator ...doc.data()
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
         console.error("Failed to fetch budgets on server:", error);
@@ -995,15 +1038,17 @@ export default async function CampaignsPage() {
 --------------------------------------------------------------------------------
 Path: C:\Users\shop\global-batteries-dashboard\app\campaigns\[id]\page.js
 --------------------------------------------------------------------------------
+// app/campaigns/[id]/page.js
 "use client";
-
 import React from "react";
 import { useParams, useRouter } from "next/navigation";
+// FIX: Corrected relative import paths for nested routes.
 import { useAppContext } from "../../context/AppContext";
 import Sidebar from "../../components/Sidebar";
 import CreativeChecklist from "../../components/campaigns/CreativeChecklist";
 import VisualManager from "../../components/campaigns/VisualManager";
 import CopyManager from "../../components/campaigns/CopyManager";
+import toast from 'react-hot-toast';
 
 // --- CONFIG --- //
 const statusConfig = {
@@ -1014,8 +1059,6 @@ const statusConfig = {
 };
 
 // --- WIDGET COMPONENTS --- //
-// NOTE: For better maintainability, these could be moved to separate files.
-
 const CampaignOverview = ({ campaign }) => (
   <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl">
     <div className="flex justify-between items-start">
@@ -1040,7 +1083,6 @@ const AdCreativeHub = ({ campaign, onCampaignUpdate }) => (
 );
 
 const LinkedTasks = ({ campaignId, tasks }) => {
-    // ✅ FIX: Now correctly filters tasks by the unique `campaignId`.
     const campaignTasks = tasks.filter(task => task.campaignId === campaignId);
 
     return (
@@ -1049,7 +1091,7 @@ const LinkedTasks = ({ campaignId, tasks }) => {
           {campaignTasks.length > 0 ? (
             <ul className="space-y-2">
                 {campaignTasks.map(task => (
-                    <li key={task.id} className="text-gray-300 bg-gray-900/50 p-3 rounded-md text-sm">{task.text}</li>
+                   <li key={task.id} className="text-gray-300 bg-gray-900/50 p-3 rounded-md text-sm">{task.text}</li>
                 ))}
             </ul>
           ) : (
@@ -1063,7 +1105,7 @@ const LinkedTasks = ({ campaignId, tasks }) => {
 export default function CampaignDetailPage() {
   const { campaigns, tasks, saveData, loading } = useAppContext();
   const params = useParams();
-  const router = useRouter(); 
+  const router = useRouter();
 
   // Find the campaign using the unique ID from the URL
   const campaign = campaigns.find((c) => c.id === params.id);
@@ -1073,9 +1115,10 @@ export default function CampaignDetailPage() {
     try {
         const campaignToSave = { ...campaign, ...updatedData };
         await saveData('campaigns', campaignToSave);
+        toast.success('Campaign updated successfully!');
     } catch (error) {
         console.error("Error updating campaign:", error);
-        alert("Failed to update campaign. Please check the console for details.");
+        toast.error("Failed to update campaign. Please check the console for details.");
     }
   };
 
@@ -1092,11 +1135,11 @@ export default function CampaignDetailPage() {
         <div className="flex h-screen bg-gray-950">
             <Sidebar />
             <main className="flex-1 flex items-center justify-center">
-                <div className="text-center">
+                 <div className="text-center">
                     <h2 className="text-2xl font-bold text-white">Campaign Not Found</h2>
                     <button onClick={() => router.push('/campaigns')} className="mt-4 px-4 py-2 bg-yellow-400 text-gray-950 rounded-lg hover:bg-yellow-300 transition-colors">
                         Back to All Campaigns
-                    </button>
+                     </button>
                 </div>
             </main>
       </div>
@@ -1121,11 +1164,10 @@ export default function CampaignDetailPage() {
             </div>
 
             <div className="lg:col-span-2">
-              <AdCreativeHub campaign={campaign} onCampaignUpdate={handleCampaignUpdate} />
+               <AdCreativeHub campaign={campaign} onCampaignUpdate={handleCampaignUpdate} />
             </div>
 
             <div className="lg:col-span-1">
-                {/* ✅ FIX: Passing the unique `campaign.id` to the component. */}
                 <LinkedTasks campaignId={campaign.id} tasks={tasks} />
             </div>
           </div>
@@ -1141,20 +1183,21 @@ export default function CampaignDetailPage() {
 --------------------------------------------------------------------------------
 Path: C:\Users\shop\global-batteries-dashboard\app\components\Sidebar.js
 --------------------------------------------------------------------------------
+// app/components/Sidebar.js
 "use client";
-
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 
-// --- ICONS --- //
-const LayoutDashboard = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7"height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg>;
-const Target = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
-const CheckSquare = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>;
-const Notebook = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 6h4"></path><path d="M2 10h4"></path><path d="M2 14h4"></path><path d="M2 18h4"></path><rect width="16" height="20" x="4" y="2" rx="2"></rect><path d="M16 2v20"></path></svg>;
-const DollarSign = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
-const BatteryIcon = ({ className }) => <svg className={className} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="0.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16,2H8A4,4,0,0,0,4,6V18a4,4,0,0,0,4,4h8a4,4,0,0,0,4-4V6A4,4,0,0,0,16,2Zm-4,3a1,1,0,0,1,1,1V8a1,1,0,0,1-2,0V6A1,1,0,0,1,12,5Zm-2,9H8a1,1,0,0,1,0-2h2a1,1,0,0,1,0,2Zm4,0H14a1,1,0,0,1,0-2h2a1,1,0,0,1,0,2Z" /></svg>;
-
+// CHANGE: Imports are now consolidated from the barrel file
+import { 
+    LayoutDashboard, 
+    Target, 
+    CheckSquare, 
+    Notebook, 
+    DollarSign, 
+    BatteryIcon 
+} from './icons';
 
 const NavLink = ({ href, icon, children }) => {
     const pathname = usePathname();
@@ -1170,7 +1213,6 @@ const NavLink = ({ href, icon, children }) => {
         </Link>
     );
 };
-
 
 export default function Sidebar() {
     return (
@@ -1188,17 +1230,23 @@ export default function Sidebar() {
             </nav>
             <div className="px-4 py-6 mt-auto border-t border-gray-800">
                 <div className="flex items-center">
-                    <Image className="rounded-full object-cover" src="https://placehold.co/100x100/eab308/FFFFFF?text=F" alt="User avatar" width={40} height={40} />
-                    <div className="ml-3">
+                    <Image 
+                        className="rounded-full object-cover" 
+                        src="https://placehold.co/100x100/eab308/FFFFFF?text=F" 
+                        alt="User avatar for Felix" 
+                        width={40} 
+                        height={40} 
+                        aria-label="User Felix, Marketing Lead"
+                    />
+                     <div className="ml-3">
                         <p className="text-sm font-semibold text-white">Felix</p>
                         <p className="text-xs text-gray-400">Marketing Lead</p>
                     </div>
-                </div>
+                 </div>
             </div>
         </aside>
     );
 }
-
 
 │   │   ├── campaigns\
 │   │   │   ├── CopyManager.js
@@ -1207,9 +1255,9 @@ export default function Sidebar() {
 Path: C:\Users\shop\global-batteries-dashboard\app\components\campaigns\CopyManager.js
 --------------------------------------------------------------------------------
 // app/components/campaigns/CopyManager.js
-
 "use client";
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 
 export default function CopyManager({ campaign, onSave }) {
     const [primaryText, setPrimaryText] = useState('');
@@ -1219,6 +1267,7 @@ export default function CopyManager({ campaign, onSave }) {
     useEffect(() => {
         setPrimaryText(campaign.primaryText || '');
         setHeadlines(campaign.headlines && campaign.headlines.length > 0 ? campaign.headlines : ['']);
+        setHasChanges(false); // Reset changes when campaign prop changes
     }, [campaign]);
 
     const handlePrimaryTextChange = (e) => {
@@ -1245,11 +1294,21 @@ export default function CopyManager({ campaign, onSave }) {
         setHasChanges(true);
     };
 
-    const handleSave = () => {
-        // Filter out any empty headlines before saving
+    const handleSave = async () => {
         const finalHeadlines = headlines.filter(h => h.trim() !== '');
-        onSave({ primaryText, headlines: finalHeadlines });
-        setHasChanges(false);
+        try {
+            await toast.promise(
+                onSave({ primaryText, headlines: finalHeadlines }),
+                {
+                    loading: 'Saving copy...',
+                    success: 'Copy saved successfully!',
+                    error: 'Failed to save copy.',
+                }
+            );
+            setHasChanges(false);
+        } catch (error) {
+            console.error("Error saving copy:", error);
+        }
     };
 
     return (
@@ -1286,6 +1345,7 @@ export default function CopyManager({ campaign, onSave }) {
                             onClick={() => removeHeadline(index)}
                             className="text-gray-500 hover:text-red-400 disabled:opacity-50"
                             disabled={headlines.length <= 1}
+                            aria-label="Remove headline"
                         >
                             &times;
                         </button>
@@ -1301,11 +1361,11 @@ export default function CopyManager({ campaign, onSave }) {
 
             {hasChanges && (
                 <div className="flex justify-end mt-6">
-                   <button 
+                   <button
                        onClick={handleSave}
                        className="px-5 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors"
                    >
-                       Save Copy
+                     Save Copy
                    </button>
                </div>
            )}
@@ -1385,56 +1445,92 @@ export default function CreativeChecklist({ campaign }) {
 --------------------------------------------------------------------------------
 Path: C:\Users\shop\global-batteries-dashboard\app\components\campaigns\VisualManager.js
 --------------------------------------------------------------------------------
+// app/components/campaigns/VisualManager.js
 "use client";
 import React, { useState, useEffect } from 'react';
-// ✅ FIX: Corrected the import path to go up two directories (`../../`) to find the context.
 import { useAppContext } from '../../context/AppContext';
+import toast from 'react-hot-toast';
+import Image from 'next/image';
 
 const AD_FORMATS = ["1:1", "4:5", "9:16"];
 
 export default function VisualManager({ campaign, onSave }) {
     const { uploadFile } = useAppContext();
     const [visuals, setVisuals] = useState({ "1:1": null, "4:5": null, "9:16": null });
-    const [newFiles, setNewFiles] = useState({}); // To track selected files
+    const [newFiles, setNewFiles] = useState({});
     const [isUploading, setIsUploading] = useState(false);
 
     useEffect(() => {
-        // When the campaign data changes, update the local visuals state
         if (campaign.visuals) {
             setVisuals(campaign.visuals);
         } else {
-            // Reset if the campaign has no visuals
             setVisuals({ "1:1": null, "4:5": null, "9:16": null });
         }
     }, [campaign]);
+    
+    // FIX: Added cleanup effect to revoke temporary blob URLs and prevent memory leaks.
+    useEffect(() => {
+        return () => {
+            Object.values(visuals).forEach(url => {
+                if (url && url.startsWith('blob:')) {
+                    URL.revokeObjectURL(url);
+                }
+            });
+        };
+    }, [visuals]);
 
     const handleFileSelect = (format, e) => {
         const file = e.target.files[0];
         if (file) {
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime'];
+            if (!allowedTypes.includes(file.type)) {
+                toast.error(`Unsupported file type for ${format}. Please use JPEG, PNG, GIF, or MP4/MOV.`);
+                e.target.value = '';
+                return;
+            }
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            if (file.size > maxSize) {
+                toast.error(`File size exceeds 10MB limit for ${format}.`);
+                e.target.value = '';
+                return;
+            }
+
             setNewFiles(prev => ({ ...prev, [format]: file }));
-            // Show a local preview of the selected image immediately
             setVisuals(prev => ({ ...prev, [format]: URL.createObjectURL(file) }));
         }
     };
 
     const handleSave = async () => {
         setIsUploading(true);
-        const updatedVisuals = { ...visuals }; // Start with current visuals
+        // FIX: Corrected syntax from .visuals to the spread operator ...visuals
+        const updatedVisuals = { ...visuals };
 
-        // Loop through only the newly selected files and upload them
-        for (const format in newFiles) {
-            const file = newFiles[format];
-            if (file) {
-                const path = `campaigns/${campaign.id}/${format}-${file.name}`;
-                const downloadURL = await uploadFile(file, path);
-                updatedVisuals[format] = downloadURL; // Update the URL for the uploaded file
+        try {
+            for (const format in newFiles) {
+                const file = newFiles[format];
+                if (file) {
+                    const path = `campaigns/${campaign.id}/${format}-${file.name}`;
+                    const downloadURL = await uploadFile(file, path);
+                    updatedVisuals[format] = downloadURL;
+                    toast.success(`Visual for ${format} uploaded!`);
+                }
             }
+
+            await toast.promise(
+                onSave({ visuals: updatedVisuals }),
+                {
+                    loading: 'Updating campaign visuals...',
+                    success: 'Campaign visuals updated successfully!',
+                    error: 'Failed to update campaign visuals.',
+                }
+            );
+            setNewFiles({});
+        } catch (error) {
+            console.error("Error saving visuals:", error);
+            toast.error("Failed to save visuals.");
+        } finally {
+            setIsUploading(false);
         }
-        
-        // Pass the final set of visual URLs up to the parent component
-        onSave({ visuals: updatedVisuals });
-        setNewFiles({}); // Clear the queue of new files
-        setIsUploading(false);
     };
 
     const hasChanges = Object.keys(newFiles).length > 0;
@@ -1442,23 +1538,28 @@ export default function VisualManager({ campaign, onSave }) {
     return (
         <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl mt-6">
             <h3 className="text-xl font-semibold text-white mb-4">🖼️ Visual Asset Manager</h3>
-            
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {AD_FORMATS.map((format) => (
                     <div key={format}>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Format {format}</label>
-                        <div className="w-full h-48 bg-gray-900/50 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-700 overflow-hidden">
+                         <label className="block text-sm font-medium text-gray-300 mb-2">Format {format}</label>
+                        <div className="w-full h-48 bg-gray-900/50 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-700 overflow-hidden relative">
                             {visuals[format] ? (
-                                <img src={visuals[format]} alt={`${format} visual preview`} className="w-full h-full object-contain" />
-                            ) : (
+                                <Image
+                                    src={visuals[format]}
+                                    alt={`${format} visual preview`}
+                                    fill
+                                    className="object-contain"
+                                    // FIX: Removed unoptimized={true}. next.config.mjs is set up correctly.
+                                />
+                             ) : (
                                 <span className="text-gray-500 text-sm">No Image</span>
                             )}
-                        </div>
+                         </div>
                         <input
                             type="file"
                             accept="image/*,video/*"
                             onChange={(e) => handleFileSelect(format, e)}
-                            className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-yellow-950 hover:file:bg-yellow-300 mt-3 cursor-pointer"
+                            className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-yellow-950 hover:file:bg-yellow-300 mt-3 cursor-pointer"
                         />
                     </div>
                 ))}
@@ -1466,15 +1567,531 @@ export default function VisualManager({ campaign, onSave }) {
 
             {(hasChanges || isUploading) && (
                  <div className="flex justify-end mt-6">
-                    <button 
+                    <button
                         onClick={handleSave}
                         disabled={isUploading}
-                        className="px-5 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                         className="px-5 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
                     >
                         {isUploading ? 'Uploading...' : 'Save Visuals'}
                     </button>
                  </div>
             )}
+        </div>
+    );
+}
+
+│   │   ├── icons\
+│   │   │   ├── BatteryIcon.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\BatteryIcon.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const BatteryIcon = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="0.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16,2H8A4,4,0,0,0,4,6V18a4,4,0,0,0,4,4h8a4,4,0,0,0,4-4V6A4,4,0,0,0,16,2Zm-4,3a1,1,0,0,1,1,1V8a1,1,0,0,1-2,0V6A1,1,0,0,1,12,5Zm-2,9H8a1,1,0,0,1,0-2h2a1,1,0,0,1,0,2Zm4,0H14a1,1,0,0,1,0-2h2a1,1,0,0,1,0,2Z" />
+    </svg>
+);
+
+export default BatteryIcon;
+
+│   │   │   ├── CheckSquare.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\CheckSquare.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const CheckSquare = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <polyline points="9 11 12 14 22 4"></polyline>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+    </svg>
+);
+
+export default CheckSquare;
+
+│   │   │   ├── DollarSign.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\DollarSign.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const DollarSign = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <line x1="12" y1="1" x2="12" y2="23"></line>
+        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+    </svg>
+);
+
+export default DollarSign;
+
+│   │   │   ├── Download.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Download.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const Download = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+    </svg>
+);
+
+export default Download;
+
+│   │   │   ├── Edit.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Edit.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const Edit = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+    </svg>
+);
+
+export default Edit;
+
+│   │   │   ├── index.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\index.js
+--------------------------------------------------------------------------------
+// app/components/icons/index.js
+
+export { default as BatteryIcon } from './BatteryIcon';
+export { default as CheckSquare } from './CheckSquare';
+export { default as DollarSign } from './DollarSign';
+export { default as Download } from './Download';
+export { default as Edit } from './Edit';
+export { default as LayoutDashboard } from './LayoutDashboard';
+export { default as List } from './List';
+export { default as MoreVertical } from './MoreVertical';
+export { default as Notebook } from './Notebook';
+export { default as Plus } from './Plus';
+export { default as Store } from './Store';
+export { default as Target } from './Target';
+export { default as Trello } from './Trello';
+export { default as Trash2 } from './Trash2';
+export { default as Upload } from './Upload';
+
+│   │   │   ├── LayoutDashboard.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\LayoutDashboard.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const LayoutDashboard = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <rect width="7" height="9" x="3" y="3" rx="1"></rect>
+        <rect width="7" height="5" x="14" y="3" rx="1"></rect>
+        <rect width="7" height="9" x="14" y="12" rx="1"></rect>
+        <rect width="7" height="5" x="3" y="16" rx="1"></rect>
+    </svg>
+);
+
+export default LayoutDashboard;
+
+│   │   │   ├── List.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\List.js
+--------------------------------------------------------------------------------
+// app/components/icons/List.js
+import React from 'react';
+
+const List = ({ className }) => (
+    <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        width="24" 
+        height="24" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+        className={className}
+    >
+        <line x1="8" y1="6" x2="21" y2="6" />
+        <line x1="8" y1="12" x2="21" y2="12" />
+        <line x1="8" y1="18" x2="21" y2="18" />
+        <line x1="3" y1="6" x2="3.01" y2="6" />
+        <line x1="3" y1="12" x2="3.01" y2="12" />
+        <line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+);
+
+export default List;
+
+│   │   │   ├── MoreVertical.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\MoreVertical.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const MoreVertical = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <circle cx="12" cy="12" r="1"></circle>
+        <circle cx="12" cy="5" r="1"></circle>
+        <circle cx="12" cy="19" r="1"></circle>
+    </svg>
+);
+
+export default MoreVertical;
+
+│   │   │   ├── Notebook.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Notebook.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const Notebook = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M2 6h4"></path><path d="M2 10h4"></path>
+        <path d="M2 14h4"></path><path d="M2 18h4"></path>
+        <rect width="16" height="20" x="4" y="2" rx="2"></rect>
+        <path d="M16 2v20"></path>
+    </svg>
+);
+
+export default Notebook;
+
+│   │   │   ├── Plus.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Plus.js
+--------------------------------------------------------------------------------
+// app/components/icons/Plus.js
+import React from 'react';
+
+const Plus = ({ className }) => (
+    <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        width="24" 
+        height="24" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+        className={className}
+    >
+        <path d="M5 12h14"></path>
+        <path d="M12 5v14"></path>
+    </svg>
+);
+
+export default Plus;
+
+│   │   │   ├── Store.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Store.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const Store = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>
+        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+        <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>
+        <path d="M2 7h20"/>
+        <path d="M22 7v3a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2V7"/>
+    </svg>
+);
+
+export default Store;
+
+│   │   │   ├── Target.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Target.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const Target = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <circle cx="12" cy="12" r="10"></circle>
+        <circle cx="12" cy="12" r="6"></circle>
+        <circle cx="12" cy="12" r="2"></circle>
+    </svg>
+);
+
+export default Target;
+
+│   │   │   ├── Trash2.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Trash2.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const Trash2 = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M3 6h18"></path>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+    </svg>
+);
+
+export default Trash2;
+
+│   │   │   ├── Trello.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Trello.js
+--------------------------------------------------------------------------------
+// app/components/icons/Trello.js
+import React from 'react';
+
+const Trello = ({ className }) => (
+    <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        width="24" 
+        height="24" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+        className={className}
+    >
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <rect x="7" y="7" width="3" height="9" />
+        <rect x="14" y="7" width="3" height="5" />
+    </svg>
+);
+
+export default Trello;
+
+│   │   │   ├── Upload.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Upload.js
+--------------------------------------------------------------------------------
+import React from 'react';
+
+const Upload = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+    </svg>
+);
+
+export default Upload;
+
+│   │   ├── notes\
+│   │   │   ├── NoteCard.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\notes\NoteCard.js
+--------------------------------------------------------------------------------
+// app/components/notes/NoteCard.js
+"use client";
+import React, { useState } from 'react';
+import { MoreVertical, Edit, Trash2 } from '../icons';
+
+export default function NoteCard({ note, onEdit, onDelete }) {
+    const [isMenuOpen, setMenuOpen] = useState(false);
+
+    // A small function to prevent the onBlur from firing before the onClick
+    const handleMenuAction = (action) => {
+        action();
+        setMenuOpen(false);
+    };
+
+    return (
+        <div className={`rounded-xl shadow-lg flex flex-col ${note.color} border border-gray-700/50`}>
+            <div className="p-6 flex-1 flex flex-col">
+                <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-lg text-white break-words pr-2">{note.title}</h3>
+                    <div className="relative flex-shrink-0">
+                        <button
+                            onClick={() => setMenuOpen(!isMenuOpen)}
+                            onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
+                            className="text-white/60 hover:text-white p-1 rounded-full"
+                            aria-expanded={isMenuOpen}
+                            aria-label="Note options"
+                        >
+                            <MoreVertical className="w-5 h-5" />
+                        </button>
+                        {isMenuOpen && (
+                            <div className="absolute right-0 mt-2 w-32 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-10">
+                                <button onClick={() => handleMenuAction(() => onEdit(note))} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700" aria-label={`Edit note: ${note.title}`}>
+                                    <Edit className="w-4 h-4" /> Edit
+                                </button>
+                                <button onClick={() => handleMenuAction(() => onDelete(note.id))} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-700" aria-label={`Delete note: ${note.title}`}>
+                                    <Trash2 className="w-4 h-4" /> Delete
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                <p className="text-white/80 text-sm whitespace-pre-wrap flex-1 break-words">{note.content}</p>
+            </div>
+        </div>
+    );
+};
+
+│   │   │   ├── NoteEditorModal.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\notes\NoteEditorModal.js
+--------------------------------------------------------------------------------
+// app/components/notes/NoteEditorModal.js
+"use client";
+import React, { useEffect } from 'react';
+import toast from 'react-hot-toast';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
+const NOTE_COLORS = ['bg-gray-800', 'bg-red-900/80', 'bg-yellow-900/80', 'bg-green-900/80', 'bg-blue-900/80', 'bg-indigo-900/80', 'bg-purple-900/80', 'bg-pink-900/80'];
+
+const noteSchema = z.object({
+    title: z.string().min(1, 'Title is required'),
+    content: z.string().min(1, 'Content is required'),
+    color: z.string()
+});
+
+export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit }) {
+    const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+        resolver: zodResolver(noteSchema),
+    });
+
+    const selectedColor = watch('color', noteToEdit?.color || NOTE_COLORS[0]);
+
+    useEffect(() => {
+        // This effect runs when the modal opens to populate the form
+        // with the note's data if we are editing, or resets it if creating.
+        const defaultValues = {
+            title: noteToEdit?.title || '',
+            content: noteToEdit?.content || '',
+            color: noteToEdit?.color || NOTE_COLORS[0]
+        };
+        reset(defaultValues);
+    }, [isOpen, noteToEdit, reset]);
+
+    useEffect(() => {
+        // This effect shows toast notifications for form errors.
+        if (errors.title) toast.error(errors.title.message);
+        if (errors.content) toast.error(errors.content.message);
+    }, [errors]);
+
+    if (!isOpen) {
+        return null;
+    }
+
+    const onSubmit = (data) => {
+        const noteToSave = {
+            ...noteToEdit,
+            ...data,
+            id: noteToEdit?.id,
+            createdAt: noteToEdit?.createdAt || new Date().toISOString()
+        };
+        onSave(noteToSave);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4">
+                <form onSubmit={handleSubmit(onSubmit)}>
+                    <div className="flex items-center justify-between p-6 border-b border-gray-800">
+                        <h3 className="text-xl font-semibold text-white">{noteToEdit ? 'Edit Note' : 'Create New Note'}</h3>
+                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none" aria-label="Close modal">&times;</button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <div>
+                            <label htmlFor="noteTitle" className="block text-sm font-medium text-gray-300 mb-1">Note Title</label>
+                            <input {...register("title")} id="noteTitle" placeholder="e.g., Competitor Analysis" className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+                        </div>
+                        <div>
+                            <label htmlFor="noteContent" className="block text-sm font-medium text-gray-300 mb-1">Content</label>
+                            <textarea {...register("content")} id="noteContent" rows="6" placeholder="Jot down your ideas..." className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"></textarea>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">Color</label>
+                            <div className="flex gap-3">
+                                {NOTE_COLORS.map(colorClass => (
+                                    <button
+                                        type="button"
+                                        key={colorClass}
+                                        onClick={() => setValue('color', colorClass, { shouldValidate: true })}
+                                        className={`w-8 h-8 rounded-full ${colorClass} transition-transform duration-150 ${selectedColor === colorClass ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white' : 'hover:scale-110'}`}
+                                        aria-label={`Select color ${colorClass.split('-')[1]}`}
+                                    ></button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
+                        <button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors">Save Note</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+│   │   ├── ui\
+│   │   │   ├── ConfirmationModal.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\ui\ConfirmationModal.js
+--------------------------------------------------------------------------------
+// app/components/ui/ConfirmationModal.js
+"use client";
+import React from 'react';
+
+export default function ConfirmationModal({ isOpen, onClose, onConfirm, message, confirmText = "Confirm", confirmColor = "bg-red-500" }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-message">
+      <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-2xl m-4 max-w-sm w-full">
+        <p id="confirmation-message" className="text-white mb-6 text-lg">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="px-5 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
+          <button onClick={onConfirm} className={`px-5 py-2 text-sm font-semibold text-gray-950 ${confirmColor} rounded-lg hover:opacity-90 transition-colors`}>
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+│   │   │   ├── SkeletonCard.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\ui\SkeletonCard.js
+--------------------------------------------------------------------------------
+// app/components/ui/SkeletonCard.js
+"use client";
+
+export default function SkeletonCard() {
+    return (
+        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl animate-pulse">
+            <div className="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+            <div className="h-8 bg-gray-700 rounded w-1/2"></div>
         </div>
     );
 }
@@ -1487,12 +2104,11 @@ Path: C:\Users\shop\global-batteries-dashboard\app\context\AppContext.js
 --------------------------------------------------------------------------------
 // app/context/AppContext.js
 "use client";
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
-// ✅ Import from your new central firebase file
-import { db, storage } from './firebase'; 
-import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { db, storage } from './firebase';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, orderBy } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import toast from 'react-hot-toast';
 
 const AppContext = createContext();
 
@@ -1504,39 +2120,42 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // This logic remains the same
     const collectionsToFetch = {
-      campaigns: setCampaigns,
-      tasks: setTasks,
-      notes: setNotes,
-      budgets: setBudgets,
+      campaigns: { setter: setCampaigns, q: query(collection(db, 'campaigns'), orderBy('startDate', 'desc')) },
+      tasks: { setter: setTasks, q: query(collection(db, 'tasks')) },
+      notes: { setter: setNotes, q: query(collection(db, 'notes'), orderBy('createdAt', 'desc')) },
+      budgets: { setter: setBudgets, q: query(collection(db, 'budgets'), orderBy('startDate', 'desc')) },
     };
-    
+
     let loadedCount = 0;
     const totalCollections = Object.keys(collectionsToFetch).length;
 
-    const unsubs = Object.entries(collectionsToFetch).map(([name, setter]) => 
-      onSnapshot(collection(db, name), (snapshot) => {
+    const unsubs = Object.entries(collectionsToFetch).map(([name, { setter, q }]) =>
+      onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setter(data);
-        
-        loadedCount++;
-        if (loadedCount === totalCollections) {
-            setLoading(false);
+
+        if (loading) {
+            loadedCount++;
+            if (loadedCount === totalCollections) {
+                setLoading(false);
+            }
         }
       }, (error) => {
-        console.error("Error fetching collection: ", name, error);
-        loadedCount++;
-        if (loadedCount === totalCollections) {
-            setLoading(false);
+        console.error(`Error fetching collection '${name}':`, error);
+        toast.error(`Failed to load ${name}. Please try again.`);
+        if (loading) {
+            loadedCount++;
+            if (loadedCount === totalCollections) {
+                setLoading(false);
+            }
         }
       })
     );
 
     return () => unsubs.forEach(unsub => unsub());
-  }, []);
+  }, [loading]);
 
-  // Data management functions remain the same
   const saveData = async (collectionName, data) => {
     const dataToSave = { ...data };
     Object.keys(dataToSave).forEach(key => {
@@ -1545,23 +2164,38 @@ export function AppProvider({ children }) {
         }
     });
 
-    if (data.id) {
-      const docRef = doc(db, collectionName, data.id);
-      await setDoc(docRef, dataToSave, { merge: true });
-    } else {
-      await addDoc(collection(db, collectionName), dataToSave);
+    try {
+        if (data.id) {
+            const docRef = doc(db, collectionName, data.id);
+            await setDoc(docRef, dataToSave, { merge: true });
+        } else {
+            await addDoc(collection(db, collectionName), dataToSave);
+        }
+    } catch (error) {
+        console.error(`Error saving data to ${collectionName}:`, error);
+        throw new Error(`Failed to save data: ${error.message}`);
     }
   };
 
   const deleteData = async (collectionName, id) => {
-    await deleteDoc(doc(db, collectionName, id));
+    try {
+        await deleteDoc(doc(db, collectionName, id));
+    } catch (error) {
+        console.error(`Error deleting data from ${collectionName}:`, error);
+        throw new Error(`Failed to delete data: ${error.message}`);
+    }
   };
 
   const uploadFile = async (file, path) => {
     const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(storageRef);
-    return downloadURL;
+    try {
+        await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(storageRef);
+        return downloadURL;
+    } catch (error) {
+        console.error("Error uploading file:", error);
+        throw new Error("Failed to upload file.");
+    }
   };
 
   const value = {
@@ -1617,6 +2251,45 @@ const storage = getStorage(app);
 // Export the instances you'll need in other files
 export { app, db, storage };
 
+│   ├── hooks\
+│   │   ├── useTasks.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\hooks\useTasks.js
+--------------------------------------------------------------------------------
+// app/hooks/useTasks.js
+"use client";
+import { useState } from 'react';
+import { useAppContext } from '../context/AppContext';
+import toast from 'react-hot-toast';
+
+export function useTasks() {
+  const { saveData } = useAppContext();
+  const [draggedTask, setDraggedTask] = useState(null);
+
+  const handleDragStart = (e, task) => {
+    setDraggedTask(task);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDrop = async (e, newStatus) => {
+    e.preventDefault();
+    if (draggedTask && draggedTask.status !== newStatus) {
+      const updatedTask = { ...draggedTask, status: newStatus };
+      try {
+        await saveData('tasks', updatedTask);
+        toast.success(`Task status updated to ${newStatus}!`);
+      } catch (error) {
+        console.error("Error updating task status:", error);
+        toast.error('Failed to update task status.');
+      }
+    }
+    setDraggedTask(null);
+  };
+  
+  return { draggedTask, handleDragStart, handleDrop };
+}
+
 │   ├── notes\
 │   │   ├── NoteClientView.js
 
@@ -1625,155 +2298,97 @@ Path: C:\Users\shop\global-batteries-dashboard\app\notes\NoteClientView.js
 --------------------------------------------------------------------------------
 // app/notes/NoteClientView.js
 "use client";
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import { useAppContext } from '../context/AppContext';
-import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
-import { app } from '../context/firebase';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
+import NoteCard from '../components/notes/NoteCard';
+import NoteEditorModal from '../components/notes/NoteEditorModal';
+import { Plus } from '../components/icons';
 
-// --- ICONS & CONFIG --- //
-const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
-const MoreVertical = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>;
-const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
-const Trash2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
-const NOTE_COLORS = ['bg-gray-800', 'bg-red-900/80', 'bg-yellow-900/80', 'bg-green-900/80', 'bg-blue-900/80', 'bg-indigo-900/80', 'bg-purple-900/80', 'bg-pink-900/80'];
-
-// --- SUB-COMPONENTS --- //
-const NoteEditorModal = ({ isOpen, onClose, onSave, noteToEdit }) => {
-    const [title, setTitle] = useState('');
-    const [content, setContent] = useState('');
-    const [color, setColor] = useState(NOTE_COLORS[0]);
-
-    useEffect(() => {
-        // This effect now runs every time the modal opens
-        if (isOpen) {
-            if (noteToEdit) {
-                setTitle(noteToEdit.title || '');
-                setContent(noteToEdit.content || '');
-                setColor(noteToEdit.color || NOTE_COLORS[0]);
-            } else {
-                setTitle('');
-                setContent('');
-                setColor(NOTE_COLORS[0]);
-            }
-        }
-    }, [noteToEdit, isOpen]); // ✅ FIX: Added `isOpen` to dependency array
-
-    if (!isOpen) return null;
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        const savedNote = { ...noteToEdit, id: noteToEdit?.id, title, content, color };
-        onSave(savedNote);
-    };
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={e => e.stopPropagation()}>
-                <form onSubmit={handleSubmit}>
-                    <div className="flex items-center justify-between p-6 border-b border-gray-800">
-                        <h3 className="text-xl font-semibold text-white">{noteToEdit ? 'Edit Note' : 'Create New Note'}</h3>
-                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
-                    </div>
-                    <div className="p-6 space-y-4">
-                        <div>
-                            <label htmlFor="noteTitle" className="block text-sm font-medium text-gray-300 mb-1">Note Title</label>
-                            <input type="text" name="noteTitle" id="noteTitle" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Competitor Analysis" required className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" />
-                        </div>
-                        <div>
-                            <label htmlFor="noteContent" className="block text-sm font-medium text-gray-300 mb-1">Content</label>
-                            <textarea name="noteContent" id="noteContent" value={content} onChange={(e) => setContent(e.target.value)} rows="6" placeholder="Jot down your ideas..." required className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"></textarea>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">Color</label>
-                            <div className="flex gap-3">
-                                {NOTE_COLORS.map(c => (
-                                    <button type="button" key={c} onClick={() => setColor(c)} className={`w-8 h-8 rounded-full ${c} transition-transform duration-150 ${color === c ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white' : 'hover:scale-110'}`} aria-label={`Select color ${c}`}></button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
-                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
-                        <button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors">Save Note</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-const NoteCard = ({ note, onEdit, onDelete }) => {
-    const [isMenuOpen, setMenuOpen] = useState(false);
-    return (
-        <div className={`rounded-xl shadow-lg flex flex-col ${note.color} border border-gray-700/50`}>
-            <div className="p-6 flex-1 flex flex-col">
-                <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-lg text-white break-words">{note.title}</h3>
-                    <div className="relative flex-shrink-0">
-                        <button onClick={() => setMenuOpen(!isMenuOpen)} onBlur={() => setTimeout(() => setMenuOpen(false), 100)} className="text-white/60 hover:text-white">
-                            <MoreVertical className="w-5 h-5" />
-                        </button>
-                        {isMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-32 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-10">
-                                <button onClick={() => { onEdit(note); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"><Edit className="w-4 h-4" /> Edit</button>
-                                <button onClick={() => { onDelete(note.id); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-700"><Trash2 className="w-4 h-4" /> Delete</button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-                <p className="text-white/80 text-sm whitespace-pre-wrap flex-1 break-words">{note.content}</p>
-            </div>
-        </div>
-    );
-};
-
-
-// --- MAIN CLIENT COMPONENT --- //
-export default function NoteClientView({ initialNotes }) {
-    const { saveData, deleteData } = useAppContext();
-    const [notes, setNotes] = useState(initialNotes);
+export default function NoteClientView() {
+    const { notes, saveData, deleteData, loading } = useAppContext();
     const [isEditorOpen, setEditorOpen] = useState(false);
     const [noteToEdit, setNoteToEdit] = useState(null);
-
-    useEffect(() => {
-        const db = getFirestore(app);
-        const unsubscribe = onSnapshot(collection(db, 'notes'), (snapshot) => {
-            const updatedNotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setNotes(updatedNotes);
-        });
-        return () => unsubscribe();
-    }, []);
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
+    const [noteToDelete, setNoteToDelete] = useState(null);
 
     const handleSaveNote = async (savedNote) => {
         try {
-            await saveData('notes', savedNote);
+            await toast.promise(saveData('notes', savedNote), {
+                loading: 'Saving note...',
+                success: 'Note saved successfully!',
+                error: 'Failed to save note.',
+            });
             setEditorOpen(false);
         } catch (error) {
             console.error("Error saving note: ", error);
-            alert("Failed to save note.");
         }
     };
-    const handleOpenCreateModal = () => { setNoteToEdit(null); setEditorOpen(true); };
-    const handleOpenEditModal = (note) => { setNoteToEdit(note); setEditorOpen(true); };
-    const handleDelete = async (id) => {
-        if (window.confirm("Are you sure you want to delete this note?")) {
-            await deleteData('notes', id);
+
+    const handleOpenCreateModal = () => {
+        setNoteToEdit(null);
+        setEditorOpen(true);
+    };
+
+    const handleOpenEditModal = (note) => {
+        setNoteToEdit(note);
+        setEditorOpen(true);
+    };
+
+    const handleDelete = (id) => {
+        setNoteToDelete(id);
+        setConfirmOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!noteToDelete) return;
+        try {
+            await deleteData('notes', noteToDelete);
+            toast.success('Note deleted.');
+        } catch (error) {
+            toast.error('Failed to delete note.');
+        } finally {
+            setConfirmOpen(false);
+            setNoteToDelete(null);
         }
     };
+
+    if (loading) {
+        return (
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10">
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
+                        <div>
+                            <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
+                            <div className="h-5 bg-gray-700 rounded w-72 animate-pulse"></div>
+                        </div>
+                    </header>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
+                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
+                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
+                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
+                    </div>
+                </main>
+            </div>
+        );
+    }
 
     return (
         <div className="font-sans antialiased text-gray-200">
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
-                <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
+                <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
                         <div>
                             <h2 className="text-3xl font-bold text-white">Notes Hub</h2>
                             <p className="text-gray-400 mt-1">Your space for brainstorming and strategic planning.</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap">
+                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap" aria-label="Create New Note">
                                 <Plus className="w-5 h-5" /> Create Note
                             </button>
                         </div>
@@ -1785,6 +2400,12 @@ export default function NoteClientView({ initialNotes }) {
                     </div>
                 </main>
                 <NoteEditorModal isOpen={isEditorOpen} onClose={() => setEditorOpen(false)} onSave={handleSaveNote} noteToEdit={noteToEdit} />
+                <ConfirmationModal
+                    isOpen={isConfirmOpen}
+                    onClose={() => setConfirmOpen(false)}
+                    onConfirm={confirmDelete}
+                    message="Are you sure you want to delete this note?"
+                />
             </div>
         </div>
     );
@@ -1796,29 +2417,30 @@ export default function NoteClientView({ initialNotes }) {
 Path: C:\Users\shop\global-batteries-dashboard\app\notes\page.js
 --------------------------------------------------------------------------------
 // app/notes/page.js
-import NoteClientView from './NoteClientView';
-import { getFirestore, collection, getDocs, query } from 'firebase/firestore';
-import { db } from '../context/firebase';
+import NoteClientView from './NoteClientView'; // [cite: 421]
+import { getFirestore, collection, getDocs, query, orderBy } from 'firebase/firestore'; // [cite: 422]
+import { db } from '../context/firebase'; // [cite: 422]
+// Corrected import path [cite: 423]
 
 // Server-side function to get initial notes
 async function getNotes() {
     try {
-        // You might want to add ordering to your notes
-        const snapshot = await getDocs(query(collection(db, 'notes')));
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-        console.error("Failed to fetch notes on server:", error);
-        return [];
+        // You might want to add ordering to your notes, which would require an index
+        const notesQuery = query(collection(db, 'notes'), orderBy('createdAt', 'desc')); // Added orderBy
+        const snapshot = await getDocs(notesQuery); // [cite: 424]
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); // [cite: 424]
+    } catch (error) { // [cite: 424]
+        console.error("Failed to fetch notes on server:", error); // [cite: 425]
+        return []; // [cite: 425]
     }
 }
 
 // Main Server Component for the page
 export default async function NotesPage() {
     // Fetch initial data on the server
-    const initialNotes = await getNotes();
-
+    const initialNotes = await getNotes(); // [cite: 426]
     // Pass data to the Client Component
-    return <NoteClientView initialNotes={initialNotes} />;
+    return <NoteClientView initialNotes={initialNotes} />; // [cite: 427]
 }
 
 │   ├── tasks\
@@ -1863,7 +2485,6 @@ export default async function TasksPage() {
         getTasks(),
         getCampaigns()
     ]);
-
     // Pass data to the Client Component
     return <TaskClientView initialTasks={initialTasks} initialCampaigns={initialCampaigns} />;
 }
@@ -1875,100 +2496,29 @@ Path: C:\Users\shop\global-batteries-dashboard\app\tasks\TaskClientView.js
 --------------------------------------------------------------------------------
 // app/tasks/TaskClientView.js
 "use client";
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import Sidebar from '../components/Sidebar';
 import { useAppContext } from '../context/AppContext';
-import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
-import { app } from '../context/firebase';
+import toast from 'react-hot-toast';
+import { useTasks } from '../hooks/useTasks';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
+import SkeletonCard from '../components/ui/SkeletonCard';
+import { Target, Plus, MoreVertical, Edit, Trash2 } from '../components/icons';
 
-// --- ICONS & CONFIG --- //
-const Target = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
-const Plus = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>;
-const MoreVertical = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>;
-const Edit = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
-const Trash2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+// CHANGE: Dynamically import the modal
+const TaskEditorModal = dynamic(() => import('./TaskEditorModal'), {
+    loading: () => <p className="text-center p-4">Loading Editor...</p>,
+    ssr: false
+});
+
 const statusConfig = {
-    "To Do": { color: "gray", bg: "bg-gray-800", text: "text-gray-400" },
-    "In Progress": { color: "blue", bg: "bg-blue-900/50", text: "text-blue-300" },
-    "Done": { color: "green", bg: "bg-green-900/50", text: "text-green-300" },
+    "To Do": { colorClass: "bg-gray-500", text: "text-gray-400" },
+    "In Progress": { colorClass: "bg-blue-500", text: "text-blue-300" },
+    "Done": { colorClass: "bg-green-500", text: "text-green-300" },
 };
 const priorityConfig = { "High": "bg-red-500", "Medium": "bg-yellow-500", "Low": "bg-green-500" };
 const KANBAN_COLUMNS = ["To Do", "In Progress", "Done"];
-
-// --- SUB-COMPONENTS --- //
-const TaskEditorModal = ({ isOpen, onClose, onSave, taskToEdit, campaigns }) => {
-    const [text, setText] = useState('');
-    const [campaignId, setCampaignId] = useState('');
-    const [priority, setPriority] = useState('Medium');
-
-    useEffect(() => {
-        // This effect now runs correctly every time the modal opens
-        if (isOpen) {
-            if (taskToEdit) {
-                setText(taskToEdit.text || '');
-                setCampaignId(taskToEdit.campaignId || (campaigns[0]?.id || ''));
-                setPriority(taskToEdit.priority || 'Medium');
-            } else {
-                setText('');
-                setCampaignId(campaigns[0]?.id || '');
-                setPriority('Medium');
-            }
-        }
-    }, [taskToEdit, isOpen, campaigns]); // ✅ Correct dependency array
-
-    if (!isOpen) return null;
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        const linkedCampaign = campaigns.find(c => c.id === campaignId);
-        const savedTask = {
-            ...taskToEdit, id: taskToEdit?.id, text, priority,
-            campaignId: campaignId,
-            campaign: linkedCampaign ? linkedCampaign.name : 'Unassigned',
-            status: taskToEdit?.status || 'To Do'
-        };
-        onSave(savedTask);
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={(e) => e.stopPropagation()}>
-                <form onSubmit={handleSubmit}>
-                    <div className="flex items-center justify-between p-6 border-b border-gray-800">
-                        <h3 className="text-xl font-semibold text-white">{taskToEdit ? 'Edit Task' : 'Create New Task'}</h3>
-                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
-                    </div>
-                    <div className="p-6 space-y-4">
-                        <div>
-                            <label htmlFor="taskText" className="block text-sm font-medium text-gray-300 mb-1">Task Description</label>
-                            <input type="text" name="taskText" id="taskText" value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g., Design new video creative" required className="w-full bg-gray-800 border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="w-full">
-                                <label htmlFor="campaign" className="block text-sm font-medium text-gray-300 mb-1">Link to Campaign</label>
-                                <select name="campaign" id="campaign" value={campaignId} onChange={(e) => setCampaignId(e.target.value)} className="w-full bg-gray-800 border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400">
-                                    <option value="">Unassigned</option>
-                                    {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="w-full">
-                                <label htmlFor="priority" className="block text-sm font-medium text-gray-300 mb-1">Priority</label>
-                                <select name="priority" id="priority" value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full bg-gray-800 border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400">
-                                    <option>High</option><option>Medium</option><option>Low</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
-                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
-                        <button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors">Save Task</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
 
 const TaskCard = ({ task, onEdit, onDelete, onDragStart, isDragging }) => {
     const [isMenuOpen, setMenuOpen] = useState(false);
@@ -1977,13 +2527,24 @@ const TaskCard = ({ task, onEdit, onDelete, onDragStart, isDragging }) => {
             <div className="flex justify-between items-start mb-2">
                 <p className="font-semibold text-white pr-4 break-words">{task.text}</p>
                 <div className="relative flex-shrink-0">
-                    <button onClick={() => setMenuOpen(!isMenuOpen)} onBlur={() => setTimeout(() => setMenuOpen(false), 100)} className="text-gray-500 hover:text-white">
+                    <button
+                         onClick={() => setMenuOpen(!isMenuOpen)}
+                        onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
+                        className="text-gray-500 hover:text-white"
+                        aria-expanded={isMenuOpen}
+                        aria-haspopup="true"
+                        aria-label="Task options"
+                    >
                         <MoreVertical className="w-5 h-5" />
                     </button>
                     {isMenuOpen && (
                         <div className="absolute right-0 mt-2 w-32 bg-gray-700 border border-gray-600 rounded-md shadow-lg z-10">
-                            <button onClick={() => { onEdit(task); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-600"><Edit className="w-4 h-4" /> Edit</button>
-                            <button onClick={() => { onDelete(task.id); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-600"><Trash2 className="w-4 h-4" /> Delete</button>
+                            <button onClick={() => { onEdit(task); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-600" aria-label="Edit task">
+                                <Edit className="w-4 h-4" /> Edit
+                            </button>
+                            <button onClick={() => { onDelete(task.id); setMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-600" aria-label="Delete task">
+                                <Trash2 className="w-4 h-4" /> Delete
+                            </button>
                         </div>
                     )}
                 </div>
@@ -1999,83 +2560,254 @@ const TaskCard = ({ task, onEdit, onDelete, onDragStart, isDragging }) => {
     );
 };
 
-
-// --- MAIN CLIENT COMPONENT --- //
-export default function TaskClientView({ initialTasks, initialCampaigns }) {
-    const { saveData, deleteData } = useAppContext();
-    const [tasks, setTasks] = useState(initialTasks);
+export default function TaskClientView({ initialCampaigns }) {
+    const { tasks, campaigns, loading, saveData, deleteData } = useAppContext();
+    const { draggedTask, handleDragStart, handleDrop } = useTasks();
     const [isModalOpen, setModalOpen] = useState(false);
     const [taskToEdit, setTaskToEdit] = useState(null);
-    const [draggedTask, setDraggedTask] = useState(null);
-
-    useEffect(() => {
-        const db = getFirestore(app);
-        const unsubscribe = onSnapshot(collection(db, 'tasks'), (snapshot) => {
-            const updatedTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setTasks(updatedTasks);
-        });
-        return () => unsubscribe();
-    }, []);
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
+    const [taskToDelete, setTaskToDelete] = useState(null);
 
     const handleOpenCreateModal = () => { setTaskToEdit(null); setModalOpen(true); };
     const handleOpenEditModal = (task) => { setTaskToEdit(task); setModalOpen(true); };
+
     const handleSaveTask = async (savedTask) => {
         try {
-            await saveData('tasks', savedTask);
+            await toast.promise(saveData('tasks', savedTask), {
+                loading: 'Saving task...',
+                success: 'Task saved successfully!',
+                error: 'Failed to save task.',
+            });
             setModalOpen(false);
         } catch (error) {
             console.error("Error saving task:", error);
-            alert("Failed to save task.");
         }
-    };
-    const handleDelete = async (id) => {
-        if (window.confirm("Are you sure you want to delete this task?")) {
-            await deleteData('tasks', id);
-        }
-    };
-    const handleDragStart = (e, task) => { setDraggedTask(task); e.dataTransfer.effectAllowed = 'move'; };
-    const handleDragOver = (e) => { e.preventDefault(); };
-    const handleDrop = async (e, newStatus) => {
-        e.preventDefault();
-        if (draggedTask && draggedTask.status !== newStatus) {
-            const updatedTask = { ...draggedTask, status: newStatus };
-            await saveData('tasks', updatedTask);
-        }
-        setDraggedTask(null);
     };
 
-    return (
-        <div className="font-sans antialiased text-gray-200">
+    const handleDelete = (id) => {
+        setTaskToDelete(id);
+        setConfirmOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!taskToDelete) return;
+        try {
+            await deleteData('tasks', taskToDelete);
+            toast.success('Task deleted successfully!');
+        } catch (error) {
+            toast.error('Failed to delete task.');
+            console.error("Error deleting task:", error);
+        } finally {
+            setConfirmOpen(false);
+            setTaskToDelete(null);
+        }
+    };
+    
+    if (loading) {
+        return (
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
-                <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
+                <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
-                        <div>
-                            <h2 className="text-3xl font-bold text-white">Tasks Board</h2>
-                            <p className="text-gray-400 mt-1">Organize your workflow from &apos;To Do&apos; to &apos;Done&apos;.</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap"><Plus className="w-5 h-5" />Create Task</button>
+                         <div>
+                           <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
+                           <div className="h-5 bg-gray-700 rounded w-72 animate-pulse"></div>
                         </div>
                     </header>
                     <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-x-auto">
                         {KANBAN_COLUMNS.map(status => (
-                            <div key={status} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, status)} className="bg-gray-900/70 border-dashed border-2 border-transparent data-[is-over=true]:border-yellow-400/50 rounded-xl flex flex-col min-w-[300px]" data-is-over={draggedTask && draggedTask.status !== status}>
-                                <div className="p-4 border-b border-gray-800 flex-shrink-0">
-                                    <h3 className="font-semibold text-white flex items-center gap-2"><span className={`w-3 h-3 rounded-full bg-${statusConfig[status].color}-500`}></span>{status}<span className="ml-auto text-sm text-gray-500">{tasks.filter(t => t.status === status).length}</span></h3>
+                            <div key={status} className="bg-gray-900/70 rounded-xl flex flex-col min-w-[300px]">
+                                <div className="p-4 border-b border-gray-800">
+                                    <div className="h-6 bg-gray-700 rounded w-1/2 animate-pulse"></div>
                                 </div>
-                                <div className="p-4 space-y-4 overflow-y-auto flex-1">
-                                    {tasks.filter(t => t.status === status).map(task => (
-                                        <TaskCard key={task.id} task={task} onEdit={handleOpenEditModal} onDelete={handleDelete} onDragStart={(e) => handleDragStart(e, task)} isDragging={draggedTask?.id === task.id} />
-                                    ))}
+                                <div className="p-4 space-y-4">
+                                    <SkeletonCard /><SkeletonCard />
                                 </div>
                             </div>
                         ))}
                     </div>
                 </main>
-                <TaskEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveTask} taskToEdit={taskToEdit} campaigns={initialCampaigns} />
+            </div>
+        );
+    }
+
+    return (
+        <div className="font-sans antialiased text-gray-200">
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
+                         <div>
+                            <h2 className="text-3xl font-bold text-white">Tasks Board</h2>
+                            <p className="text-gray-400 mt-1">Organize your workflow from &apos;To Do&apos; to &apos;Done&apos;.</p>
+                         </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap" aria-label="Create New Task">
+                                <Plus className="w-5 h-5" />Create Task
+                            </button>
+                        </div>
+                    </header>
+                     <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-x-auto">
+                        {KANBAN_COLUMNS.map(status => (
+                            <div 
+                                key={status} 
+                                onDragOver={(e) => e.preventDefault()} 
+                                onDrop={(e) => handleDrop(e, status)} 
+                                className="bg-gray-900/70 border-dashed border-2 border-transparent data-[is-over=true]:border-yellow-400/50 rounded-xl flex flex-col min-w-[300px]" 
+                                data-is-over={!!draggedTask && draggedTask.status !== status}
+                            >
+                                <div className="p-4 border-b border-gray-800 flex-shrink-0">
+                                    <h3 className="font-semibold text-white flex items-center gap-2">
+                                        <span className={`w-3 h-3 rounded-full ${statusConfig[status].colorClass}`}></span>
+                                        {status}
+                                        <span className="ml-auto text-sm text-gray-500">{tasks.filter(t => t.status === status).length}</span>
+                                    </h3>
+                                </div>
+                                 <div className="p-4 space-y-4 overflow-y-auto flex-1">
+                                    {tasks.filter(t => t.status === status).map(task => (
+                                        <TaskCard 
+                                            key={task.id} 
+                                            task={task} 
+                                            onEdit={handleOpenEditModal} 
+                                            onDelete={handleDelete} 
+                                            onDragStart={(e) => handleDragStart(e, task)} 
+                                            isDragging={draggedTask?.id === task.id} 
+                                        />
+                                    ))}
+                                </div>
+                             </div>
+                        ))}
+                    </div>
+                </main>
+                {/* Conditionally render the modal only when it's open */}
+                {isModalOpen && (
+                    <TaskEditorModal
+                        isOpen={isModalOpen}
+                        onClose={() => setModalOpen(false)}
+                        onSave={handleSaveTask}
+                        taskToEdit={taskToEdit}
+                        campaigns={campaigns}
+                    />
+                )}
+                 <ConfirmationModal
+                    isOpen={isConfirmOpen}
+                    onClose={() => setConfirmOpen(false)}
+                    onConfirm={confirmDelete}
+                    message="Are you sure you want to delete this task?"
+                />
             </div>
         </div>
     );
 }
+
+│   │   ├── TaskEditorModal.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\tasks\TaskEditorModal.js
+--------------------------------------------------------------------------------
+// app/tasks/TaskEditorModal.js
+"use client";
+import React, { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
+import { z } from 'zod';
+
+const KANBAN_COLUMNS = ["To Do", "In Progress", "Done"];
+
+const taskSchema = z.object({
+  id: z.string().optional(),
+  text: z.string().min(1, { message: "Task description is required." }),
+  priority: z.enum(['High', 'Medium', 'Low']),
+  campaignId: z.string().optional().nullable(),
+  campaign: z.string().optional().nullable(),
+  status: z.enum(KANBAN_COLUMNS),
+});
+
+export default function TaskEditorModal({ isOpen, onClose, onSave, taskToEdit, campaigns }) {
+    const [text, setText] = useState('');
+    const [campaignId, setCampaignId] = useState('');
+    const [priority, setPriority] = useState('Medium');
+    const modalRef = useRef(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            if (taskToEdit) {
+                setText(taskToEdit.text || '');
+                setCampaignId(taskToEdit.campaignId || '');
+                setPriority(taskToEdit.priority || 'Medium');
+            } else {
+                setText('');
+                setCampaignId('');
+                setPriority('Medium');
+            }
+            if (modalRef.current) {
+                modalRef.current.focus();
+            }
+        }
+    }, [taskToEdit, isOpen, campaigns]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!text.trim()) {
+            toast.error("Task description cannot be empty.");
+            return;
+        }
+        const linkedCampaign = campaigns.find(c => c.id === campaignId);
+        const savedTask = {
+            ...taskToEdit,
+            id: taskToEdit?.id,
+            text,
+            priority,
+            campaignId: campaignId || null,
+            campaign: linkedCampaign ? linkedCampaign.name : 'Unassigned',
+            status: taskToEdit?.status || 'To Do'
+        };
+        const result = taskSchema.safeParse(savedTask);
+        if (!result.success) {
+            toast.error(`Validation failed: ${result.error.errors.map(err => err.message).join(', ')}`);
+            return;
+        }
+        onSave(result.data);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div ref={modalRef} tabIndex="-1" className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4" onClick={(e) => e.stopPropagation()}>
+                <form onSubmit={handleSubmit}>
+                    <div className="flex items-center justify-between p-6 border-b border-gray-800">
+                         <h3 className="text-xl font-semibold text-white">{taskToEdit ? 'Edit Task' : 'Create New Task'}</h3>
+                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none" aria-label="Close modal">&times;</button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                         <div>
+                            <label htmlFor="taskText" className="block text-sm font-medium text-gray-300 mb-1">Task Description</label>
+                            <input type="text" name="taskText" id="taskText" value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g., Design new video creative" required className="w-full bg-gray-800 border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                 <label htmlFor="campaign" className="block text-sm font-medium text-gray-300 mb-1">Link to Campaign</label>
+                                <select name="campaign" id="campaign" value={campaignId} onChange={(e) => setCampaignId(e.target.value)} className="w-full bg-gray-800 border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" disabled={!campaigns.length}>
+                                    <option value="">Unassigned</option>
+                                    {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                                 {!campaigns.length && <p className="text-sm text-gray-500 mt-1">No campaigns available to link.</p>}
+                            </div>
+                            <div>
+                                 <label htmlFor="priority" className="block text-sm font-medium text-gray-300 mb-1">Priority</label>
+                                <select name="priority" id="priority" value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full bg-gray-800 border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400">
+                                    <option>High</option><option>Medium</option><option>Low</option>
+                                </select>
+                            </div>
+                        </div>
+                     </div>
+                    <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
+                        <button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors">Save Task</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
 

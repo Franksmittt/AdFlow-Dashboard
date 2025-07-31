@@ -10,9 +10,10 @@ async function getBudgets() {
         const budgetsQuery = query(collection(db, 'budgets'), orderBy('startDate', 'desc'));
         const budgetSnapshot = await getDocs(budgetsQuery);
         // We need to serialize the data to pass it from a Server Component to a Client Component.
-        const budgetList = budgetSnapshot.docs.map(doc => ({ 
-            id: doc.id, 
-            ...doc.data() 
+        const budgetList = budgetSnapshot.docs.map(doc => ({
+            id: doc.id,
+            // FIX: Corrected syntax from .doc.data() to the spread operator ...doc.data()
+            ...doc.data()
         }));
         return budgetList;
     } catch (error) {

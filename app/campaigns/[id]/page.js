@@ -1,12 +1,14 @@
+// app/campaigns/[id]/page.js
 "use client";
-
 import React from "react";
 import { useParams, useRouter } from "next/navigation";
+// FIX: Corrected relative import paths for nested routes.
 import { useAppContext } from "../../context/AppContext";
 import Sidebar from "../../components/Sidebar";
 import CreativeChecklist from "../../components/campaigns/CreativeChecklist";
 import VisualManager from "../../components/campaigns/VisualManager";
 import CopyManager from "../../components/campaigns/CopyManager";
+import toast from 'react-hot-toast';
 
 // --- CONFIG --- //
 const statusConfig = {
@@ -15,10 +17,7 @@ const statusConfig = {
     "Live": { bg: "bg-green-900/50", text: "text-green-300" },
     "Completed": { bg: "bg-gray-800", text: "text-gray-400" },
 };
-
 // --- WIDGET COMPONENTS --- //
-// NOTE: For better maintainability, these could be moved to separate files.
-
 const CampaignOverview = ({ campaign }) => (
   <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl">
     <div className="flex justify-between items-start">
@@ -33,26 +32,23 @@ const CampaignOverview = ({ campaign }) => (
     </div>
   </div>
 );
-
 const AdCreativeHub = ({ campaign, onCampaignUpdate }) => (
   <div className="space-y-6">
     <CreativeChecklist campaign={campaign} />
+    {/* VisualManager is used here to manage assets for the EXISTING campaign */}
     <VisualManager campaign={campaign} onSave={onCampaignUpdate} />
     <CopyManager campaign={campaign} onSave={onCampaignUpdate} />
   </div>
 );
-
 const LinkedTasks = ({ campaignId, tasks }) => {
-    // ✅ FIX: Now correctly filters tasks by the unique `campaignId`.
     const campaignTasks = tasks.filter(task => task.campaignId === campaignId);
-
     return (
         <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl">
           <h3 className="text-xl font-semibold text-white mb-4">✅ Linked Tasks</h3>
           {campaignTasks.length > 0 ? (
             <ul className="space-y-2">
                 {campaignTasks.map(task => (
-                    <li key={task.id} className="text-gray-300 bg-gray-900/50 p-3 rounded-md text-sm">{task.text}</li>
+                   <li key={task.id} className="text-gray-300 bg-gray-900/50 p-3 rounded-md text-sm">{task.text}</li>
                 ))}
             </ul>
           ) : (
@@ -66,22 +62,29 @@ const LinkedTasks = ({ campaignId, tasks }) => {
 export default function CampaignDetailPage() {
   const { campaigns, tasks, saveData, loading } = useAppContext();
   const params = useParams();
-  const router = useRouter(); 
+  const router = useRouter();
 
   // Find the campaign using the unique ID from the URL
   const campaign = campaigns.find((c) => c.id === params.id);
-
   const handleCampaignUpdate = async (updatedData) => {
     if (!campaign) return;
     try {
-        const campaignToSave = { ...campaign, ...updatedData };
+        // The checklist needs to be recalculated when visuals or copy change
+        const currentChecklist = campaign.checklist || {};
+        const newChecklist = {
+            ...currentChecklist,
+            primaryText: !!(updatedData.primaryText || campaign.primaryText),
+            headlines: (updatedData.headlines || campaign.headlines)?.some(h => h.trim() !== ''),
+            visuals: updatedData.visuals ? Object.values(updatedData.visuals).some(v => v) : currentChecklist.visuals,
+        };
+        const campaignToSave = { ...campaign, ...updatedData, checklist: newChecklist };
         await saveData('campaigns', campaignToSave);
+        toast.success('Campaign updated successfully!');
     } catch (error) {
         console.error("Error updating campaign:", error);
-        alert("Failed to update campaign. Please check the console for details.");
+        toast.error("Failed to update campaign. Please check the console for details.");
     }
   };
-
   if (loading) {
     return (
         <div className="flex h-screen bg-gray-950 text-white items-center justify-center">
@@ -124,11 +127,10 @@ export default function CampaignDetailPage() {
             </div>
 
             <div className="lg:col-span-2">
-              <AdCreativeHub campaign={campaign} onCampaignUpdate={handleCampaignUpdate} />
+               <AdCreativeHub campaign={campaign} onCampaignUpdate={handleCampaignUpdate} />
             </div>
 
             <div className="lg:col-span-1">
-                {/* ✅ FIX: Passing the unique `campaign.id` to the component. */}
                 <LinkedTasks campaignId={campaign.id} tasks={tasks} />
             </div>
           </div>
