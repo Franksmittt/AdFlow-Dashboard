@@ -7,12 +7,11 @@ import Sidebar from "../components/Sidebar";
 import { useAppContext } from "../context/AppContext";
 import toast from 'react-hot-toast';
 import { z } from 'zod';
-// CHANGE: Import the new accessible hook
 import { useAccessibleKanban } from '../hooks/useAccessibleKanban';
 import ConfirmationModal from '../components/ui/ConfirmationModal';
 import { Plus, List, Trello } from '../components/icons';
 
-
+const AD_FORMATS = ["1:1", "4:5", "9:16"];
 const BRANCHES = ["Alberton", "Vanderbijlpark", "Sasolburg", "National"];
 const KANBAN_COLUMNS = ["Planning", "In Progress", "Live", "Completed"];
 const statusConfig = {
@@ -46,21 +45,18 @@ const campaignSchema = z.object({
     targeting: z.boolean(),
     budget: z.boolean(),
   }),
+  performance: z.any().optional(), // Allow performance data
 });
 
 // --- SUB-COMPONENTS --- //
-const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets }) => {
-    // This component remains unchanged from its original version.
+const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets, uploadFile }) => {
     const [name, setName] = useState("");
     const [branch, setBranch] = useState(BRANCHES[0]);
     const [objective, setObjective] = useState(OBJECTIVES[0]);
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
-    const [primaryText, setPrimaryText] = useState("");
-    const [headlines, setHeadlines] = useState([""]);
     const [visuals, setVisuals] = useState({ "1:1": null, "4:5": null, "9:16": null });
-    const [targetValue, setTargetValue] = useState("");
-    const [budgetId, setBudgetId] = useState("");
+    const [isUploading, setIsUploading] = useState(null);
     const modalRef = useRef(null);
 
     useEffect(() => {
@@ -71,42 +67,30 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
                 setObjective(campaignToEdit.objective || OBJECTIVES[0]);
                 setStartDate(campaignToEdit.startDate || "");
                 setEndDate(campaignToEdit.endDate || "");
-                setPrimaryText(campaignToEdit.primaryText || "");
-                setHeadlines(campaignToEdit.headlines?.length ? campaignToEdit.headlines : [""]);
                 setVisuals(campaignToEdit.visuals || { "1:1": null, "4:5": null, "9:16": null });
-                setTargetValue(campaignToEdit.targetValue || "");
-                setBudgetId(campaignToEdit.budgetId || "");
             } else {
-                setName(""); setBranch(BRANCHES[0]); setObjective(OBJECTIVES[0]); setStartDate(""); setEndDate(""); setPrimaryText(""); setHeadlines([""]); setVisuals({ "1:1": null, "4:5": null, "9:16": null }); setTargetValue(""); setBudgetId("");
+                setName(""); setBranch(BRANCHES[0]); setObjective(OBJECTIVES[0]); setStartDate(""); setEndDate("");
+                setVisuals({ "1:1": null, "4:5": null, "9:16": null });
             }
-            if (modalRef.current) {
-                modalRef.current.focus();
-            }
+            if (modalRef.current) modalRef.current.focus();
         }
     }, [campaignToEdit, isOpen]);
 
-    useEffect(() => {
-        return () => {
-            Object.values(visuals).forEach(url => {
-                if (url && url.startsWith('blob:')) {
-                    URL.revokeObjectURL(url);
-                }
-            });
-        };
-    }, [visuals]);
     if (!isOpen) return null;
 
     const handleSubmit = (e) => {
         e.preventDefault();
         const checklist = {
-            primaryText: !!primaryText, headlines: headlines.some(h => h.trim() !== ''),
-            visuals: Object.values(visuals).some(v => v), targeting: !!targetValue, budget: !!budgetId,
+            primaryText: campaignToEdit?.primaryText ? !!campaignToEdit.primaryText : false,
+            headlines: campaignToEdit?.headlines ? campaignToEdit.headlines.some(h => h.trim() !== '') : false,
+            visuals: Object.values(visuals).some(v => v),
+            targeting: campaignToEdit?.targetValue ? !!campaignToEdit.targetValue : false,
+            budget: campaignToEdit?.budgetId ? !!campaignToEdit.budgetId : false,
         };
         const savedCampaign = {
-            ...campaignToEdit, id: campaignToEdit?.id, name, branch, objective,
-            startDate, endDate, primaryText, headlines: headlines.filter(h => h.trim() !== ''), visuals,
-            targetValue: parseFloat(targetValue) || 0, budgetId, checklist,
+            ...campaignToEdit, name, branch, objective, startDate, endDate, visuals,
             status: campaignToEdit?.status || "Planning",
+            checklist,
         };
 
         const result = campaignSchema.safeParse(savedCampaign);
@@ -115,32 +99,25 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
             toast.error(`Validation failed:\n${errorMessages}`);
             return;
         }
-
         onSave(result.data);
         onClose();
     };
-    const handleVisualUpload = (format, e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime'];
-            if (!allowedTypes.includes(file.type)) {
-                toast.error(`Unsupported file type for ${format}. Please use JPEG, PNG, GIF, or MP4/MOV.`);
-                return;
-            }
-            const maxSize = 10 * 1024 * 1024; // 10MB
-            if (file.size > maxSize) {
-                toast.error(`File size exceeds 10MB limit for ${format}.`);
-                return;
-            }
-            setVisuals((prev) => ({ ...prev, [format]: URL.createObjectURL(file) }));
-        }
-    };
 
-    const addHeadline = () => setHeadlines((prev) => [...prev, ""]);
-    const updateHeadline = (index, value) => {
-        const newHeadlines = [...headlines];
-        newHeadlines[index] = value;
-        setHeadlines(newHeadlines);
+    const handleVisualUpload = async (format, e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsUploading(format);
+        const toastId = toast.loading(`Uploading ${format} visual...`);
+        try {
+            const downloadURL = await uploadFile(file, 'campaign-visuals');
+            setVisuals((prev) => ({ ...prev, [format]: downloadURL }));
+            toast.success(`Visual for ${format} uploaded!`, { id: toastId });
+        } catch (error) {
+            toast.error("Upload failed. Please try again.", { id: toastId });
+        } finally {
+            setIsUploading(null);
+        }
     };
 
     return (
@@ -154,25 +131,21 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
                     <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                         <div><label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">Campaign Name</label><input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-1">Branch</label>
-                                <select id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map((b) => (<option key={b} value={b}>{b}</option>))}
-                                </select>
-                            </div>
-                            <div>
-                                <label htmlFor="budget" className="block text-sm font-medium text-gray-300 mb-1">Link Budget</label>
-                                <select id="budget" value={budgetId} onChange={(e) => setBudgetId(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">
-                                    <option value="">No Budget Linked</option>
-                                    {budgets.map((b) => (<option key={b.id} value={b.id}>{b.name} (R{b.totalBudget})</option>))}
-                                </select>
-                            </div>
+                            <div><label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-1">Branch</label><select id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map((b) => (<option key={b} value={b}>{b}</option>))}</select></div>
+                            <div><label htmlFor="objective" className="block text-sm font-medium text-gray-300 mb-1">Objective</label><select id="objective" value={objective} onChange={(e) => setObjective(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{OBJECTIVES.map((o) => (<option key={o} value={o}>{o}</option>))}</select></div>
                         </div>
-                        <div><label htmlFor="objective" className="block text-sm font-medium text-gray-300 mb-1">Objective</label><select id="objective" value={objective} onChange={(e) => setObjective(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{OBJECTIVES.map((o) => (<option key={o} value={o}>{o}</option>))}</select></div>
                         <div className="grid grid-cols-2 gap-4"><div><label htmlFor="startDate" className="block text-sm font-medium text-gray-300 mb-1">Start Date</label><input type="date" id="startDate" value={startDate} onChange={(e) => setStartDate(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div><div><label htmlFor="endDate" className="block text-sm font-medium text-gray-300 mb-1">End Date</label><input type="date" id="endDate" value={endDate} onChange={(e) => setEndDate(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div></div>
-                        <div><label htmlFor="primaryText" className="block text-sm font-medium text-gray-300 mb-1">Primary Text</label><textarea id="primaryText" value={primaryText} onChange={(e) => setPrimaryText(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" rows="4" /></div>
-                        <div><label className="block text-sm font-medium text-gray-300 mb-1">Headlines</label>{headlines.map((headline, index) => (<input key={index} type="text" value={headline} onChange={(e) => updateHeadline(index, e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white mb-2" placeholder={`Headline ${index + 1}`} />))}<button type="button" onClick={addHeadline} className="text-yellow-400 hover:text-yellow-300 text-sm">+ Add Headline</button></div>
-                        <div><label className="block text-sm font-medium text-gray-300 mb-1">Visuals (Local Preview)</label>{AD_FORMATS.map((format) => (<div key={format} className="mb-2"><label className="block text-sm text-gray-400">{format} Visual</label><input type="file" accept="image/*,video/*" onChange={(e) => handleVisualUpload(format, e)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /><div className="relative w-32 h-32 mt-2">{visuals[format] && (<Image src={visuals[format]} alt={`${format} visual`} fill className="object-cover rounded-md" />)}</div></div>))}</div>
-                        <div><label htmlFor="targetValue" className="block text-sm font-medium text-gray-300 mb-1">Target Value</label><input type="number" id="targetValue" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-1">Visuals</label>
+                            {AD_FORMATS.map((format) => (
+                                <div key={format} className="mb-4">
+                                    <label className="block text-sm text-gray-400 mb-1">{format} Visual</label>
+                                    <input type="file" accept="image/*,video/*" onChange={(e) => handleVisualUpload(format, e)} disabled={!!isUploading} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-gray-950 hover:file:bg-yellow-300 disabled:file:bg-gray-500" />
+                                    {isUploading === format && <p className="text-xs text-yellow-400 mt-1">Uploading...</p>}
+                                    {visuals[format] && <div className="relative w-32 h-32 mt-2"><Image src={visuals[format]} alt={`${format} visual`} fill className="object-cover rounded-md" /></div>}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                     <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
                         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600">Cancel</button>
@@ -214,7 +187,6 @@ const CampaignListView = ({ campaigns, onEdit, onDelete }) => (
     </div>
 );
 
-// UPDATE: CampaignKanbanView now uses keyboard accessibility props
 const CampaignKanbanView = ({ campaigns, onDragStart, onDrop, onKeyDown, draggedItem, keyboardSelectedItem }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 flex-1 overflow-y-auto">
         {KANBAN_COLUMNS.map((status) => (
@@ -247,23 +219,17 @@ const CampaignKanbanView = ({ campaigns, onDragStart, onDrop, onKeyDown, dragged
     </div>
 );
 // --- MAIN CLIENT COMPONENT --- //
-export default function CampaignClientView({ initialCampaigns, initialBudgets }) {
-    const { campaigns, budgets, saveData, deleteData, loading } = useAppContext();
+export default function CampaignClientView() {
+    const { campaigns, budgets, saveData, deleteData, loading, uploadFile } = useAppContext();
     const [isModalOpen, setModalOpen] = useState(false);
     const [campaignToEdit, setCampaignToEdit] = useState(null);
     const [view, setView] = useState("list");
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [campaignToDelete, setCampaignToDelete] = useState(null);
     
-    // CHANGE: Use the new accessible hook
     const { 
-        draggedItem, 
-        keyboardSelectedItem,
-        handleDragStart, 
-        handleDrop, 
-        handleKeyDown 
+        draggedItem, keyboardSelectedItem, handleDragStart, handleDrop, handleKeyDown 
     } = useAccessibleKanban({ saveData, collectionName: 'campaigns', columns: KANBAN_COLUMNS });
-
 
     const handleSaveCampaign = async (savedCampaign) => {
         try {
@@ -296,7 +262,6 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
             toast.success('Campaign deleted successfully!');
         } catch (error) {
             toast.error('Failed to delete campaign.');
-            console.error("Error deleting campaign:", error);
         } finally {
             setConfirmOpen(false);
             setCampaignToDelete(null);
@@ -304,13 +269,10 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
     };
 
     if (loading) {
-        // Loading skeleton remains the same...
         return (
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
-                <main className="flex-1 flex items-center justify-center text-white">
-                    <p>Loading Campaigns...</p>
-                </main>
+                <main className="flex-1 flex items-center justify-center text-white"><p>Loading Campaigns...</p></main>
             </div>
         );
     }
@@ -342,7 +304,6 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
                     {view === "list" ? (
                         <CampaignListView campaigns={campaigns} onEdit={handleEditClick} onDelete={handleDeleteClick} />
                     ) : (
-                        // UPDATE: Pass new props to the Kanban view
                         <CampaignKanbanView 
                             campaigns={campaigns} 
                             onDragStart={handleDragStart} 
@@ -352,7 +313,7 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
                             keyboardSelectedItem={keyboardSelectedItem}
                         />
                     )}
-                    <CampaignEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveCampaign} campaignToEdit={campaignToEdit} budgets={budgets} />
+                    <CampaignEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveCampaign} campaignToEdit={campaignToEdit} budgets={budgets} uploadFile={uploadFile} />
                     <ConfirmationModal
                         isOpen={isConfirmOpen}
                         onClose={() => setConfirmOpen(false)}

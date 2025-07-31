@@ -269,6 +269,163 @@ export default function DashboardPage() {
     );
 }
 
+│   ├── analytics\
+│   │   ├── AnalyticsClientView.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\analytics\AnalyticsClientView.js
+--------------------------------------------------------------------------------
+// app/analytics/AnalyticsClientView.js
+"use client";
+import React, { useMemo } from 'react';
+import Sidebar from '../components/Sidebar';
+import { useAppContext } from '../context/AppContext';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { TrendingUp, DollarSign, CheckSquare, Target } from '../components/icons';
+
+// --- Reusable Components ---
+const StatCard = ({ title, value, icon, format = "number" }) => {
+    const formattedValue = format === 'currency' ? `R ${value.toLocaleString()}` : value.toLocaleString();
+    return (
+        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl">
+            <div className="flex justify-between items-center">
+                <p className="text-sm font-medium text-gray-400">{title}</p>
+                {icon}
+            </div>
+            <p className="text-3xl font-bold mt-2 text-white">{formattedValue}</p>
+        </div>
+    );
+};
+
+const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="p-4 bg-gray-900 border border-gray-700 rounded-lg shadow-lg">
+                <p className="label text-white font-bold">{`${label}`}</p>
+                {payload.map((pld, index) => (
+                    <p key={index} style={{ color: pld.color }} className="text-sm">
+                        {`${pld.name}: ${pld.name.toLowerCase().includes('spend') || pld.name.toLowerCase().includes('revenue') ? 'R' : ''}${pld.value.toLocaleString()}`}
+                    </p>
+                ))}
+            </div>
+        );
+    }
+    return null;
+};
+
+// --- Main Client View ---
+export default function AnalyticsClientView() {
+    const { campaigns, loading } = useAppContext();
+
+    const analyticsData = useMemo(() => {
+        if (!campaigns) return { totals: {}, chartData: [] };
+
+        const totals = {
+            spend: 0,
+            revenue: 0,
+            clicks: 0,
+            conversions: 0,
+        };
+
+        const chartData = campaigns.map(c => {
+            const p = c.performance || {};
+            totals.spend += p.spend || 0;
+            totals.revenue += p.revenue || 0;
+            totals.clicks += p.clicks || 0;
+            totals.conversions += p.conversions || 0;
+
+            const cpc = (p.clicks > 0) ? (p.spend / p.clicks) : 0;
+            const roas = (p.spend > 0) ? (p.revenue / p.spend) : 0;
+
+            return {
+                name: c.name,
+                Spend: p.spend || 0,
+                Revenue: p.revenue || 0,
+                CPC: parseFloat(cpc.toFixed(2)),
+                ROAS: parseFloat(roas.toFixed(2)),
+            };
+        });
+
+        return { totals, chartData };
+    }, [campaigns]);
+
+    if (loading) {
+        return <div className="flex h-screen bg-gray-950 text-white items-center justify-center"><p>Loading Analytics...</p></div>;
+    }
+
+    return (
+        <div className="font-sans antialiased text-gray-200">
+            <div className="flex h-screen bg-gray-950">
+                <Sidebar />
+                <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col gap-8 overflow-y-auto">
+                    <header>
+                        <h2 className="text-3xl font-bold text-white">Performance Analytics</h2>
+                        <p className="text-gray-400 mt-1">An overview of your campaign performance and key metrics.</p>
+                    </header>
+
+                    {/* Overall Stats */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard title="Total Spend" value={analyticsData.totals.spend} icon={<DollarSign className="w-6 h-6 text-red-400" />} format="currency" />
+                        <StatCard title="Total Revenue" value={analyticsData.totals.revenue} icon={<TrendingUp className="w-6 h-6 text-green-400" />} format="currency" />
+                        <StatCard title="Total Clicks" value={analyticsData.totals.clicks} icon={<Target className="w-6 h-6 text-blue-400" />} />
+                        <StatCard title="Total Conversions" value={analyticsData.totals.conversions} icon={<CheckSquare className="w-6 h-6 text-yellow-400" />} />
+                    </div>
+
+                    {/* Charts */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl h-96">
+                            <h3 className="text-xl font-semibold text-white mb-4">Spend vs. Revenue</h3>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={analyticsData.chartData} margin={{ top: 5, right: 20, left: 10, bottom: 40 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
+                                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} stroke="#a0aec0" tick={{ fontSize: 12 }} />
+                                    <YAxis stroke="#a0aec0" tick={{ fontSize: 12 }} />
+                                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(234, 179, 8, 0.1)' }}/>
+                                    <Legend wrapperStyle={{ fontSize: '14px' }} />
+                                    <Bar dataKey="Spend" fill="#f87171" />
+                                    <Bar dataKey="Revenue" fill="#4ade80" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl h-96">
+                            <h3 className="text-xl font-semibold text-white mb-4">Cost Per Click (CPC) & ROAS</h3>
+                             <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={analyticsData.chartData} margin={{ top: 5, right: 20, left: 10, bottom: 40 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
+                                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} stroke="#a0aec0" tick={{ fontSize: 12 }} />
+                                    <YAxis yAxisId="left" stroke="#a0aec0" tick={{ fontSize: 12 }} />
+                                    <YAxis yAxisId="right" orientation="right" stroke="#a0aec0" tick={{ fontSize: 12 }} />
+                                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(234, 179, 8, 0.2)' }}/>
+                                    <Legend wrapperStyle={{ fontSize: '14px' }} />
+                                    <Line yAxisId="left" type="monotone" dataKey="CPC" stroke="#60a5fa" strokeWidth={2} />
+                                    <Line yAxisId="right" type="monotone" dataKey="ROAS" stroke="#facc15" strokeWidth={2} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    );
+}
+
+
+│   │   ├── page.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\analytics\page.js
+--------------------------------------------------------------------------------
+// app/analytics/page.js
+"use client";
+
+import AnalyticsClientView from './AnalyticsClientView';
+
+// This is a simple component that renders the client view.
+export default function AnalyticsPage() {
+    return <AnalyticsClientView />;
+}
+
+
 │   ├── budgets\
 │   │   ├── BudgetClientView.js
 
@@ -595,12 +752,11 @@ import Sidebar from "../components/Sidebar";
 import { useAppContext } from "../context/AppContext";
 import toast from 'react-hot-toast';
 import { z } from 'zod';
-// CHANGE: Import the new accessible hook
 import { useAccessibleKanban } from '../hooks/useAccessibleKanban';
 import ConfirmationModal from '../components/ui/ConfirmationModal';
 import { Plus, List, Trello } from '../components/icons';
 
-
+const AD_FORMATS = ["1:1", "4:5", "9:16"];
 const BRANCHES = ["Alberton", "Vanderbijlpark", "Sasolburg", "National"];
 const KANBAN_COLUMNS = ["Planning", "In Progress", "Live", "Completed"];
 const statusConfig = {
@@ -634,21 +790,18 @@ const campaignSchema = z.object({
     targeting: z.boolean(),
     budget: z.boolean(),
   }),
+  performance: z.any().optional(), // Allow performance data
 });
 
 // --- SUB-COMPONENTS --- //
-const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets }) => {
-    // This component remains unchanged from its original version.
+const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets, uploadFile }) => {
     const [name, setName] = useState("");
     const [branch, setBranch] = useState(BRANCHES[0]);
     const [objective, setObjective] = useState(OBJECTIVES[0]);
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
-    const [primaryText, setPrimaryText] = useState("");
-    const [headlines, setHeadlines] = useState([""]);
     const [visuals, setVisuals] = useState({ "1:1": null, "4:5": null, "9:16": null });
-    const [targetValue, setTargetValue] = useState("");
-    const [budgetId, setBudgetId] = useState("");
+    const [isUploading, setIsUploading] = useState(null);
     const modalRef = useRef(null);
 
     useEffect(() => {
@@ -659,42 +812,30 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
                 setObjective(campaignToEdit.objective || OBJECTIVES[0]);
                 setStartDate(campaignToEdit.startDate || "");
                 setEndDate(campaignToEdit.endDate || "");
-                setPrimaryText(campaignToEdit.primaryText || "");
-                setHeadlines(campaignToEdit.headlines?.length ? campaignToEdit.headlines : [""]);
                 setVisuals(campaignToEdit.visuals || { "1:1": null, "4:5": null, "9:16": null });
-                setTargetValue(campaignToEdit.targetValue || "");
-                setBudgetId(campaignToEdit.budgetId || "");
             } else {
-                setName(""); setBranch(BRANCHES[0]); setObjective(OBJECTIVES[0]); setStartDate(""); setEndDate(""); setPrimaryText(""); setHeadlines([""]); setVisuals({ "1:1": null, "4:5": null, "9:16": null }); setTargetValue(""); setBudgetId("");
+                setName(""); setBranch(BRANCHES[0]); setObjective(OBJECTIVES[0]); setStartDate(""); setEndDate("");
+                setVisuals({ "1:1": null, "4:5": null, "9:16": null });
             }
-            if (modalRef.current) {
-                modalRef.current.focus();
-            }
+            if (modalRef.current) modalRef.current.focus();
         }
     }, [campaignToEdit, isOpen]);
 
-    useEffect(() => {
-        return () => {
-            Object.values(visuals).forEach(url => {
-                if (url && url.startsWith('blob:')) {
-                    URL.revokeObjectURL(url);
-                }
-            });
-        };
-    }, [visuals]);
     if (!isOpen) return null;
 
     const handleSubmit = (e) => {
         e.preventDefault();
         const checklist = {
-            primaryText: !!primaryText, headlines: headlines.some(h => h.trim() !== ''),
-            visuals: Object.values(visuals).some(v => v), targeting: !!targetValue, budget: !!budgetId,
+            primaryText: campaignToEdit?.primaryText ? !!campaignToEdit.primaryText : false,
+            headlines: campaignToEdit?.headlines ? campaignToEdit.headlines.some(h => h.trim() !== '') : false,
+            visuals: Object.values(visuals).some(v => v),
+            targeting: campaignToEdit?.targetValue ? !!campaignToEdit.targetValue : false,
+            budget: campaignToEdit?.budgetId ? !!campaignToEdit.budgetId : false,
         };
         const savedCampaign = {
-            ...campaignToEdit, id: campaignToEdit?.id, name, branch, objective,
-            startDate, endDate, primaryText, headlines: headlines.filter(h => h.trim() !== ''), visuals,
-            targetValue: parseFloat(targetValue) || 0, budgetId, checklist,
+            ...campaignToEdit, name, branch, objective, startDate, endDate, visuals,
             status: campaignToEdit?.status || "Planning",
+            checklist,
         };
 
         const result = campaignSchema.safeParse(savedCampaign);
@@ -703,32 +844,25 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
             toast.error(`Validation failed:\n${errorMessages}`);
             return;
         }
-
         onSave(result.data);
         onClose();
     };
-    const handleVisualUpload = (format, e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime'];
-            if (!allowedTypes.includes(file.type)) {
-                toast.error(`Unsupported file type for ${format}. Please use JPEG, PNG, GIF, or MP4/MOV.`);
-                return;
-            }
-            const maxSize = 10 * 1024 * 1024; // 10MB
-            if (file.size > maxSize) {
-                toast.error(`File size exceeds 10MB limit for ${format}.`);
-                return;
-            }
-            setVisuals((prev) => ({ ...prev, [format]: URL.createObjectURL(file) }));
-        }
-    };
 
-    const addHeadline = () => setHeadlines((prev) => [...prev, ""]);
-    const updateHeadline = (index, value) => {
-        const newHeadlines = [...headlines];
-        newHeadlines[index] = value;
-        setHeadlines(newHeadlines);
+    const handleVisualUpload = async (format, e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsUploading(format);
+        const toastId = toast.loading(`Uploading ${format} visual...`);
+        try {
+            const downloadURL = await uploadFile(file, 'campaign-visuals');
+            setVisuals((prev) => ({ ...prev, [format]: downloadURL }));
+            toast.success(`Visual for ${format} uploaded!`, { id: toastId });
+        } catch (error) {
+            toast.error("Upload failed. Please try again.", { id: toastId });
+        } finally {
+            setIsUploading(null);
+        }
     };
 
     return (
@@ -742,25 +876,21 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
                     <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                         <div><label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">Campaign Name</label><input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-1">Branch</label>
-                                <select id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map((b) => (<option key={b} value={b}>{b}</option>))}
-                                </select>
-                            </div>
-                            <div>
-                                <label htmlFor="budget" className="block text-sm font-medium text-gray-300 mb-1">Link Budget</label>
-                                <select id="budget" value={budgetId} onChange={(e) => setBudgetId(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">
-                                    <option value="">No Budget Linked</option>
-                                    {budgets.map((b) => (<option key={b.id} value={b.id}>{b.name} (R{b.totalBudget})</option>))}
-                                </select>
-                            </div>
+                            <div><label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-1">Branch</label><select id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map((b) => (<option key={b} value={b}>{b}</option>))}</select></div>
+                            <div><label htmlFor="objective" className="block text-sm font-medium text-gray-300 mb-1">Objective</label><select id="objective" value={objective} onChange={(e) => setObjective(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{OBJECTIVES.map((o) => (<option key={o} value={o}>{o}</option>))}</select></div>
                         </div>
-                        <div><label htmlFor="objective" className="block text-sm font-medium text-gray-300 mb-1">Objective</label><select id="objective" value={objective} onChange={(e) => setObjective(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{OBJECTIVES.map((o) => (<option key={o} value={o}>{o}</option>))}</select></div>
                         <div className="grid grid-cols-2 gap-4"><div><label htmlFor="startDate" className="block text-sm font-medium text-gray-300 mb-1">Start Date</label><input type="date" id="startDate" value={startDate} onChange={(e) => setStartDate(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div><div><label htmlFor="endDate" className="block text-sm font-medium text-gray-300 mb-1">End Date</label><input type="date" id="endDate" value={endDate} onChange={(e) => setEndDate(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div></div>
-                        <div><label htmlFor="primaryText" className="block text-sm font-medium text-gray-300 mb-1">Primary Text</label><textarea id="primaryText" value={primaryText} onChange={(e) => setPrimaryText(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" rows="4" /></div>
-                        <div><label className="block text-sm font-medium text-gray-300 mb-1">Headlines</label>{headlines.map((headline, index) => (<input key={index} type="text" value={headline} onChange={(e) => updateHeadline(index, e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white mb-2" placeholder={`Headline ${index + 1}`} />))}<button type="button" onClick={addHeadline} className="text-yellow-400 hover:text-yellow-300 text-sm">+ Add Headline</button></div>
-                        <div><label className="block text-sm font-medium text-gray-300 mb-1">Visuals (Local Preview)</label>{AD_FORMATS.map((format) => (<div key={format} className="mb-2"><label className="block text-sm text-gray-400">{format} Visual</label><input type="file" accept="image/*,video/*" onChange={(e) => handleVisualUpload(format, e)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /><div className="relative w-32 h-32 mt-2">{visuals[format] && (<Image src={visuals[format]} alt={`${format} visual`} fill className="object-cover rounded-md" />)}</div></div>))}</div>
-                        <div><label htmlFor="targetValue" className="block text-sm font-medium text-gray-300 mb-1">Target Value</label><input type="number" id="targetValue" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" /></div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-1">Visuals</label>
+                            {AD_FORMATS.map((format) => (
+                                <div key={format} className="mb-4">
+                                    <label className="block text-sm text-gray-400 mb-1">{format} Visual</label>
+                                    <input type="file" accept="image/*,video/*" onChange={(e) => handleVisualUpload(format, e)} disabled={!!isUploading} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-gray-950 hover:file:bg-yellow-300 disabled:file:bg-gray-500" />
+                                    {isUploading === format && <p className="text-xs text-yellow-400 mt-1">Uploading...</p>}
+                                    {visuals[format] && <div className="relative w-32 h-32 mt-2"><Image src={visuals[format]} alt={`${format} visual`} fill className="object-cover rounded-md" /></div>}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                     <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
                         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600">Cancel</button>
@@ -802,7 +932,6 @@ const CampaignListView = ({ campaigns, onEdit, onDelete }) => (
     </div>
 );
 
-// UPDATE: CampaignKanbanView now uses keyboard accessibility props
 const CampaignKanbanView = ({ campaigns, onDragStart, onDrop, onKeyDown, draggedItem, keyboardSelectedItem }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 flex-1 overflow-y-auto">
         {KANBAN_COLUMNS.map((status) => (
@@ -835,23 +964,17 @@ const CampaignKanbanView = ({ campaigns, onDragStart, onDrop, onKeyDown, dragged
     </div>
 );
 // --- MAIN CLIENT COMPONENT --- //
-export default function CampaignClientView({ initialCampaigns, initialBudgets }) {
-    const { campaigns, budgets, saveData, deleteData, loading } = useAppContext();
+export default function CampaignClientView() {
+    const { campaigns, budgets, saveData, deleteData, loading, uploadFile } = useAppContext();
     const [isModalOpen, setModalOpen] = useState(false);
     const [campaignToEdit, setCampaignToEdit] = useState(null);
     const [view, setView] = useState("list");
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [campaignToDelete, setCampaignToDelete] = useState(null);
     
-    // CHANGE: Use the new accessible hook
     const { 
-        draggedItem, 
-        keyboardSelectedItem,
-        handleDragStart, 
-        handleDrop, 
-        handleKeyDown 
+        draggedItem, keyboardSelectedItem, handleDragStart, handleDrop, handleKeyDown 
     } = useAccessibleKanban({ saveData, collectionName: 'campaigns', columns: KANBAN_COLUMNS });
-
 
     const handleSaveCampaign = async (savedCampaign) => {
         try {
@@ -884,7 +1007,6 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
             toast.success('Campaign deleted successfully!');
         } catch (error) {
             toast.error('Failed to delete campaign.');
-            console.error("Error deleting campaign:", error);
         } finally {
             setConfirmOpen(false);
             setCampaignToDelete(null);
@@ -892,13 +1014,10 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
     };
 
     if (loading) {
-        // Loading skeleton remains the same...
         return (
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
-                <main className="flex-1 flex items-center justify-center text-white">
-                    <p>Loading Campaigns...</p>
-                </main>
+                <main className="flex-1 flex items-center justify-center text-white"><p>Loading Campaigns...</p></main>
             </div>
         );
     }
@@ -930,7 +1049,6 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
                     {view === "list" ? (
                         <CampaignListView campaigns={campaigns} onEdit={handleEditClick} onDelete={handleDeleteClick} />
                     ) : (
-                        // UPDATE: Pass new props to the Kanban view
                         <CampaignKanbanView 
                             campaigns={campaigns} 
                             onDragStart={handleDragStart} 
@@ -940,7 +1058,7 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
                             keyboardSelectedItem={keyboardSelectedItem}
                         />
                     )}
-                    <CampaignEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveCampaign} campaignToEdit={campaignToEdit} budgets={budgets} />
+                    <CampaignEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveCampaign} campaignToEdit={campaignToEdit} budgets={budgets} uploadFile={uploadFile} />
                     <ConfirmationModal
                         isOpen={isConfirmOpen}
                         onClose={() => setConfirmOpen(false)}
@@ -951,6 +1069,7 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
         </div>
     );
 }
+
 
 │   │   ├── page.js
 
@@ -1172,6 +1291,120 @@ class ErrorBoundary extends React.Component {
 
 export default ErrorBoundary;
 
+│   │   ├── GlobalSearch.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\GlobalSearch.js
+--------------------------------------------------------------------------------
+// app/components/GlobalSearch.js
+"use client";
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useAppContext } from '../context/AppContext';
+import Fuse from 'fuse.js';
+import Link from 'next/link';
+import { Search, Target, CheckSquare, Notebook } from './icons';
+
+const ResultItem = ({ item, onClick }) => {
+    const iconMap = {
+        campaign: <Target className="w-5 h-5 text-blue-400" />,
+        task: <CheckSquare className="w-5 h-5 text-yellow-400" />,
+        note: <Notebook className="w-5 h-5 text-purple-400" />,
+    };
+
+    return (
+        <Link href={item.href} onClick={onClick}>
+            <div className="flex items-center p-3 hover:bg-gray-700 rounded-md cursor-pointer transition-colors">
+                <div className="mr-3 flex-shrink-0">{iconMap[item.type]}</div>
+                <div>
+                    <p className="font-semibold text-white text-sm">{item.title}</p>
+                    {item.subtitle && <p className="text-xs text-gray-400">{item.subtitle}</p>}
+                </div>
+            </div>
+        </Link>
+    );
+};
+
+export default function GlobalSearch() {
+    const { campaigns, tasks, notes } = useAppContext();
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState([]);
+    const [isFocused, setIsFocused] = useState(false);
+    const searchRef = useRef(null);
+
+    const fuse = useMemo(() => {
+        const allData = [
+            ...campaigns.map(c => ({ ...c, type: 'campaign', title: c.name, subtitle: c.objective, href: `/campaigns/${c.id}` })),
+            ...tasks.map(t => ({ ...t, type: 'task', title: t.text, subtitle: `In: ${t.campaign || 'Tasks'}`, href: `/tasks` })),
+            ...notes.map(n => ({ ...n, type: 'note', title: n.title, subtitle: n.content.substring(0, 30) + '...', href: `/notes` })),
+        ];
+
+        return new Fuse(allData, {
+            keys: ['title', 'subtitle', 'tags'],
+            includeScore: true,
+            threshold: 0.4,
+        });
+    }, [campaigns, tasks, notes]);
+
+    useEffect(() => {
+        if (query) {
+            const searchResults = fuse.search(query).map(result => result.item);
+            setResults(searchResults.slice(0, 10)); // Limit to top 10 results
+        } else {
+            setResults([]);
+        }
+    }, [query, fuse]);
+    
+    // Close results when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (searchRef.current && !searchRef.current.contains(event.target)) {
+                setIsFocused(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [searchRef]);
+
+
+    const handleClose = () => {
+        setQuery('');
+        setIsFocused(false);
+    };
+
+    return (
+        <div className="relative" ref={searchRef}>
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                <input
+                    type="text"
+                    placeholder="Search anything..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onFocus={() => setIsFocused(true)}
+                    className="w-full bg-gray-800 border border-transparent focus:border-yellow-400 focus:ring-yellow-400 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-500 transition-colors"
+                />
+            </div>
+
+            {isFocused && query && (
+                <div className="absolute top-full mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg shadow-2xl z-20 p-2 max-h-96 overflow-y-auto">
+                    {results.length > 0 ? (
+                        <div>
+                            {results.map((item) => (
+                                <ResultItem key={`${item.type}-${item.id}`} item={item} onClick={handleClose} />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="p-4 text-center text-gray-500">
+                            No results found for &quot;{query}&quot;
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+
 │   │   ├── Sidebar.js
 
 --------------------------------------------------------------------------------
@@ -1182,15 +1415,16 @@ Path: C:\Users\shop\global-batteries-dashboard\app\components\Sidebar.js
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import GlobalSearch from './GlobalSearch'; // <-- Import the new component
 
-// CHANGE: Imports are now consolidated from the barrel file
 import { 
     LayoutDashboard, 
     Target, 
     CheckSquare, 
     Notebook, 
     DollarSign, 
-    BatteryIcon 
+    BatteryIcon,
+    TrendingUp
 } from './icons';
 
 const NavLink = ({ href, icon, children }) => {
@@ -1210,19 +1444,24 @@ const NavLink = ({ href, icon, children }) => {
 
 export default function Sidebar() {
     return (
-        <aside className="w-64 flex-shrink-0 bg-gray-900 text-gray-200 flex-col hidden md:flex">
-            <div className="h-16 flex items-center justify-center px-4 border-b border-gray-800">
+        <aside className="w-64 flex-shrink-0 bg-gray-900 text-gray-200 flex-col hidden md:flex p-4 space-y-4">
+            <div className="h-16 flex items-center justify-center px-4 border-b border-gray-800 pb-4">
                 <BatteryIcon className="w-8 h-8 mr-2 text-yellow-400" />
                 <h1 className="text-xl font-bold text-white">AdFlow Hub</h1>
             </div>
-            <nav className="flex-1 px-4 py-6 space-y-2">
+
+            {/* --- NEW: Global Search Bar --- */}
+            <GlobalSearch />
+
+            <nav className="flex-1 space-y-2">
                 <NavLink href="/" icon={<LayoutDashboard className="w-5 h-5 mr-3" />}>Dashboard</NavLink>
                 <NavLink href="/campaigns" icon={<Target className="w-5 h-5 mr-3" />}>Campaigns</NavLink>
                 <NavLink href="/tasks" icon={<CheckSquare className="w-5 h-5 mr-3" />}>Tasks</NavLink>
-                <NavLink href="/notes" icon={<Notebook className="w-5 h-5 mr-3" />}>Notes</NavLink>
+                <NavLink href="/notes" icon={<Notebook className="w-5 h-5 mr-3" />}>Swipe File</NavLink>
                 <NavLink href="/budgets" icon={<DollarSign className="w-5 h-5 mr-3" />}>Budgets</NavLink>
+                <NavLink href="/analytics" icon={<TrendingUp className="w-5 h-5 mr-3" />}>Analytics</NavLink>
             </nav>
-            <div className="px-4 py-6 mt-auto border-t border-gray-800">
+            <div className="mt-auto border-t border-gray-800 pt-4">
                 <div className="flex items-center">
                     <Image 
                         className="rounded-full object-cover" 
@@ -1242,6 +1481,7 @@ export default function Sidebar() {
     );
 }
 
+
 │   │   ├── campaigns\
 │   │   │   ├── CopyManager.js
 
@@ -1253,15 +1493,57 @@ Path: C:\Users\shop\global-batteries-dashboard\app\components\campaigns\CopyMana
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
+// A new button component for triggering AI generation
+const AIGenerateButton = ({ onClick, isLoading, children }) => (
+    <button
+        type="button"
+        onClick={onClick}
+        disabled={isLoading}
+        className="flex items-center gap-2 text-sm text-yellow-400 hover:text-yellow-300 disabled:text-gray-500 disabled:cursor-wait transition-colors"
+    >
+        <svg className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9.9 2.1C8.7 2.5 7.5 3.3 6.5 4.2l-1.4 1.4C4.3 6.4 4 7.2 4 8c0 .8.3 1.6.9 2.2l7.1 7.1c.6.6 1.4.9 2.2.9.8 0 1.6-.3 2.2-.9l1.4-1.4c.9-.9 1.7-2.1 2.1-3.3-.4.2-.8.4-1.3.5-1.3.4-2.6-.2-3.5-1.1l-7-7C9.3 4.3 8.7 3 7.4 2.6c.1-.1.3-.2.4-.3.2-.2.4-.3.6-.5 1.2-.8 2.6-1.2 4-.1zM2.1 14.1A9.9 9.9 0 0 1 12 4.5c.3 0 .6.1.9.1.5 0 1 .1 1.4.2l-1.5 1.5c-1 1-1.5 2.3-1.4 3.6.1 1.3.7 2.5 1.7 3.4l1.5 1.5c-.1.5-.1 1-.2 1.4-.1.3-.1.6-.1.9-4.6.9-8.3-2.8-9.2-7.4-.1-.5-.1-1-.1-1.4 0-.8.3-1.6.9-2.2l1.4-1.4C9.6 7.5 10.5 8.3 11 9.5c.4 1.3-.2 2.6-1.1 3.5l-2 2c-.6.6-.9 1.4-.9 2.2z"/>
+        </svg>
+        {isLoading ? 'Generating...' : children}
+    </button>
+);
+
+// A new component to display AI suggestions
+const SuggestionsBox = ({ title, suggestions, onSelect, onClear }) => {
+    if (!suggestions || suggestions.length === 0) return null;
+
+    return (
+        <div className="mt-4 p-4 bg-gray-900/70 border border-gray-700 rounded-lg">
+            <div className="flex justify-between items-center mb-2">
+                <h4 className="text-md font-semibold text-white">{title}</h4>
+                <button onClick={onClear} className="text-xs text-gray-500 hover:text-white">&times; Clear</button>
+            </div>
+            <div className="space-y-2">
+                {suggestions.map((suggestion, index) => (
+                    <div key={index} onClick={() => onSelect(suggestion)} className="p-3 bg-gray-800 rounded-md cursor-pointer hover:bg-yellow-900/50 transition-colors">
+                        <p className="text-gray-300 text-sm">{suggestion}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+
 export default function CopyManager({ campaign, onSave }) {
     const [primaryText, setPrimaryText] = useState('');
     const [headlines, setHeadlines] = useState(['']);
     const [hasChanges, setHasChanges] = useState(false);
+    
+    // New state for AI features
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [aiSuggestions, setAiSuggestions] = useState({ primaryText: [], headlines: [] });
 
     useEffect(() => {
         setPrimaryText(campaign.primaryText || '');
         setHeadlines(campaign.headlines && campaign.headlines.length > 0 ? campaign.headlines : ['']);
         setHasChanges(false); // Reset changes when campaign prop changes
+        setAiSuggestions({ primaryText: [], headlines: [] }); // Clear AI suggestions
     }, [campaign]);
 
     const handlePrimaryTextChange = (e) => {
@@ -1305,12 +1587,103 @@ export default function CopyManager({ campaign, onSave }) {
         }
     };
 
+    // --- NEW AI FUNCTIONALITY ---
+    const handleGenerateCopy = async () => {
+        setIsGenerating(true);
+        setAiSuggestions({ primaryText: [], headlines: [] }); // Clear old suggestions
+        toast('🤖 Generating AI copy suggestions...', { icon: '🧠' });
+
+        // Construct a detailed prompt for better results
+        const prompt = `
+            You are an expert Facebook advertising copywriter. 
+            Generate ad copy for a campaign with the following details:
+            - Campaign Name: "${campaign.name}"
+            - Campaign Objective: "${campaign.objective}"
+            - Business Branch: "${campaign.branch}"
+            - Business Description: A leading retailer of car batteries and power solutions in South Africa.
+
+            Please provide 3 distinct options for the primary ad text and 5 distinct options for the headlines.
+            The tone should be direct, persuasive, and tailored for Facebook users.
+            
+            Return the response as a valid JSON object with two keys: "primaryTextSuggestions" and "headlineSuggestions". 
+            Each key should contain an array of strings.
+            Example format: 
+            {
+                "primaryTextSuggestions": ["Option 1...", "Option 2...", "Option 3..."],
+                "headlineSuggestions": ["Headline 1", "Headline 2", "Headline 3", "Headline 4", "Headline 5"]
+            }
+        `;
+
+        try {
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { 
+                contents: chatHistory,
+                generationConfig: {
+                    responseMimeType: "application/json",
+                }
+            };
+            const apiKey = ""; // This will be handled by the environment
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`API request failed with status ${response.status}`);
+            }
+
+            const result = await response.json();
+            
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                
+                const text = result.candidates[0].content.parts[0].text;
+                const parsedJson = JSON.parse(text);
+
+                setAiSuggestions({
+                    primaryText: parsedJson.primaryTextSuggestions || [],
+                    headlines: parsedJson.headlineSuggestions || []
+                });
+                toast.success('AI suggestions are ready!');
+            } else {
+                throw new Error('Unexpected API response structure.');
+            }
+
+        } catch (error) {
+            console.error("Error generating AI copy:", error);
+            toast.error("Couldn't generate AI suggestions. Please try again.");
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     return (
         <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl mt-6">
-            <h3 className="text-xl font-semibold text-white mb-4">📝 Copy & Headlines</h3>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold text-white">📝 Copy & Headlines</h3>
+                <AIGenerateButton onClick={handleGenerateCopy} isLoading={isGenerating}>
+                    Generate with AI
+                </AIGenerateButton>
+            </div>
+            
+            {/* Suggestions Box for Primary Text */}
+            <SuggestionsBox
+                title="AI Primary Text Suggestions"
+                suggestions={aiSuggestions.primaryText}
+                onSelect={(text) => {
+                    setPrimaryText(text);
+                    setHasChanges(true);
+                }}
+                onClear={() => setAiSuggestions(prev => ({ ...prev, primaryText: [] }))}
+            />
 
-            {/* Primary Text */}
-            <div>
+            {/* Primary Text Input */}
+            <div className="mt-4">
                 <label htmlFor="primaryText" className="block text-sm font-medium text-gray-300 mb-1">
                     Primary Text
                 </label>
@@ -1322,8 +1695,27 @@ export default function CopyManager({ campaign, onSave }) {
                     rows="4"
                 />
             </div>
+            
+             {/* Suggestions Box for Headlines */}
+            <SuggestionsBox
+                title="AI Headline Suggestions"
+                suggestions={aiSuggestions.headlines}
+                onSelect={(text) => {
+                    // Replace the first empty headline or add a new one
+                    const emptyIndex = headlines.findIndex(h => h.trim() === '');
+                    if (emptyIndex !== -1) {
+                        const newHeadlines = [...headlines];
+                        newHeadlines[emptyIndex] = text;
+                        setHeadlines(newHeadlines);
+                    } else {
+                        setHeadlines([...headlines, text]);
+                    }
+                    setHasChanges(true);
+                }}
+                onClear={() => setAiSuggestions(prev => ({ ...prev, headlines: [] }))}
+            />
 
-            {/* Headlines */}
+            {/* Headlines Input */}
             <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-300 mb-1">Headlines</label>
                 {headlines.map((headline, index) => (
@@ -1366,6 +1758,7 @@ export default function CopyManager({ campaign, onSave }) {
         </div>
     );
 }
+
 
 │   │   │   ├── CreativeChecklist.js
 
@@ -1444,55 +1837,54 @@ Path: C:\Users\shop\global-batteries-dashboard\app\components\campaigns\VisualMa
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
+import { useAppContext } from '../../context/AppContext'; // Import the context
 
 const AD_FORMATS = ["1:1", "4:5", "9:16"];
 
-// This component handles uploading and displaying local previews of visuals.
 export default function VisualManager({ campaign, onSave }) {
+    const { uploadFile } = useAppContext(); // Get the uploadFile function
     const [visuals, setVisuals] = useState({ "1:1": null, "4:5": null, "9:16": null });
     const [hasChanges, setHasChanges] = useState(false);
+    const [isUploading, setIsUploading] = useState(null); // Track uploading state for each format
 
     useEffect(() => {
-        // When the campaign data changes, update the local visuals state.
         if (campaign && campaign.visuals) {
             setVisuals(campaign.visuals);
         }
-        setHasChanges(false); // Reset changes on new campaign data
+        setHasChanges(false);
     }, [campaign]);
 
-    // Clean up blob URLs to prevent memory leaks
-    useEffect(() => {
-        return () => {
-            Object.values(visuals).forEach(url => {
-                if (url && url.startsWith('blob:')) {
-                    URL.revokeObjectURL(url);
-                }
-            });
-        };
-    }, [visuals]);
-
-    const handleVisualUpload = (format, e) => {
+    const handleVisualUpload = async (format, e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Create a local URL for the file to show a preview.
-        const newVisuals = { ...visuals, [format]: URL.createObjectURL(file) };
-        setVisuals(newVisuals);
-        setHasChanges(true);
-        toast.success(`Preview for ${format} visual loaded.`);
+        setIsUploading(format);
+        const toastId = toast.loading(`Uploading ${format} visual...`);
+
+        try {
+            // Use the new uploadFile function from context
+            const downloadURL = await uploadFile(file, 'campaign-visuals');
+            
+            setVisuals(prev => ({ ...prev, [format]: downloadURL }));
+            setHasChanges(true);
+            toast.success(`Visual for ${format} uploaded!`, { id: toastId });
+        } catch (error) {
+            console.error("File upload error:", error);
+            toast.error("Upload failed. Please try again.", { id: toastId });
+        } finally {
+            setIsUploading(null);
+        }
     };
 
     const handleSaveVisuals = () => {
-        // The onSave function now just updates the parent component's state.
-        // It no longer uploads to Firebase.
         onSave({ ...campaign, visuals });
         setHasChanges(false);
-        toast.success("Visual changes saved locally.");
+        // Toast is now handled by the parent component's onSave
     };
 
     return (
         <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl mt-6">
-            <h3 className="text-xl font-semibold text-white mb-4">🖼️ Visual Assets (Local Preview)</h3>
+            <h3 className="text-xl font-semibold text-white mb-4">🖼️ Visual Assets</h3>
             <div className="space-y-4">
                 {AD_FORMATS.map((format) => (
                     <div key={format}>
@@ -1501,8 +1893,10 @@ export default function VisualManager({ campaign, onSave }) {
                             type="file"
                             accept="image/*,video/*"
                             onChange={(e) => handleVisualUpload(format, e)}
-                            className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-gray-950 hover:file:bg-yellow-300"
+                            disabled={isUploading === format}
+                            className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-gray-950 hover:file:bg-yellow-300 disabled:file:bg-gray-500"
                         />
+                        {isUploading === format && <p className="text-xs text-yellow-400 mt-1">Uploading, please wait...</p>}
                         {visuals[format] && (
                             <div className="mt-4 relative w-40 h-40 bg-gray-900 rounded-lg">
                                 <Image
@@ -1510,6 +1904,7 @@ export default function VisualManager({ campaign, onSave }) {
                                     alt={`${format} preview`}
                                     fill
                                     className="object-cover rounded-lg"
+                                    onError={(e) => { e.target.style.display = 'none'; }}
                                 />
                             </div>
                         )}
@@ -1634,6 +2029,10 @@ export { default as Target } from './Target';
 export { default as Trello } from './Trello';
 export { default as Trash2 } from './Trash2';
 export { default as Upload } from './Upload';
+export { default as TrendingUp } from './TrendingUp';
+export { default as Link } from './Link';
+export { default as Search } from './Search'; // <-- Add this line
+
 
 │   │   │   ├── LayoutDashboard.js
 
@@ -1652,6 +2051,24 @@ const LayoutDashboard = ({ className }) => (
 );
 
 export default LayoutDashboard;
+
+│   │   │   ├── Link.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Link.js
+--------------------------------------------------------------------------------
+// app/components/icons/Link.js
+import React from 'react';
+
+const Link = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"></path>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72"></path>
+    </svg>
+);
+
+export default Link;
+
 
 │   │   │   ├── List.js
 
@@ -1748,6 +2165,24 @@ const Plus = ({ className }) => (
 
 export default Plus;
 
+│   │   │   ├── Search.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\Search.js
+--------------------------------------------------------------------------------
+// app/components/icons/Search.js
+import React from 'react';
+
+const Search = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>
+);
+
+export default Search;
+
+
 │   │   │   ├── Store.js
 
 --------------------------------------------------------------------------------
@@ -1831,6 +2266,24 @@ const Trello = ({ className }) => (
 
 export default Trello;
 
+│   │   │   ├── TrendingUp.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\icons\TrendingUp.js
+--------------------------------------------------------------------------------
+// app/components/icons/TrendingUp.js
+import React from 'react';
+
+const TrendingUp = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+        <polyline points="16 7 22 7 22 13"></polyline>
+    </svg>
+);
+
+export default TrendingUp;
+
+
 │   │   │   ├── Upload.js
 
 --------------------------------------------------------------------------------
@@ -1857,12 +2310,12 @@ Path: C:\Users\shop\global-batteries-dashboard\app\components\notes\NoteCard.js
 // app/components/notes/NoteCard.js
 "use client";
 import React, { useState } from 'react';
-import { MoreVertical, Edit, Trash2 } from '../icons';
+import { MoreVertical, Edit, Trash2, Link as LinkIcon } from '../icons';
+import Image from 'next/image';
 
 export default function NoteCard({ note, onEdit, onDelete }) {
     const [isMenuOpen, setMenuOpen] = useState(false);
 
-    // A small function to prevent the onBlur from firing before the onClick
     const handleMenuAction = (action) => {
         action();
         setMenuOpen(false);
@@ -1870,7 +2323,20 @@ export default function NoteCard({ note, onEdit, onDelete }) {
 
     return (
         <div className={`rounded-xl shadow-lg flex flex-col ${note.color} border border-gray-700/50`}>
-            <div className="p-6 flex-1 flex flex-col">
+            {/* Display Image if it exists */}
+            {note.imageUrl && (
+                <div className="relative w-full h-40 bg-gray-900 rounded-t-xl">
+                    <Image
+                        src={note.imageUrl}
+                        alt={`Visual for ${note.title}`}
+                        layout="fill"
+                        className="object-cover rounded-t-xl"
+                        onError={(e) => { e.target.style.display = 'none'; }} // Hide if image fails to load
+                    />
+                </div>
+            )}
+            
+            <div className="p-4 flex-1 flex flex-col">
                 <div className="flex justify-between items-start mb-2">
                     <h3 className="font-bold text-lg text-white break-words pr-2">{note.title}</h3>
                     <div className="relative flex-shrink-0">
@@ -1895,11 +2361,38 @@ export default function NoteCard({ note, onEdit, onDelete }) {
                         )}
                     </div>
                 </div>
-                <p className="text-white/80 text-sm whitespace-pre-wrap flex-1 break-words">{note.content}</p>
+                
+                {/* Display Content */}
+                <p className="text-white/80 text-sm whitespace-pre-wrap flex-1 break-words mb-4">{note.content}</p>
+
+                {/* Display Tags and Source URL */}
+                <div className="mt-auto pt-4 border-t border-white/10">
+                    {note.tags && note.tags.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                            {note.tags.map(tag => (
+                                <span key={tag} className="bg-gray-900/50 text-blue-300 text-xs font-medium px-2 py-1 rounded-full">
+                                    #{tag}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                    {note.sourceUrl && (
+                        <a 
+                            href={note.sourceUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="flex items-center gap-2 text-xs text-yellow-400 hover:text-yellow-300 transition-colors"
+                        >
+                            <LinkIcon className="w-3 h-3" />
+                            <span>View Original Source</span>
+                        </a>
+                    )}
+                </div>
             </div>
         </div>
     );
 };
+
 
 │   │   │   ├── NoteEditorModal.js
 
@@ -1908,99 +2401,167 @@ Path: C:\Users\shop\global-batteries-dashboard\app\components\notes\NoteEditorMo
 --------------------------------------------------------------------------------
 // app/components/notes/NoteEditorModal.js
 "use client";
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import Image from 'next/image';
+import { useAppContext } from '../../context/AppContext'; // Import context
 
 const NOTE_COLORS = ['bg-gray-800', 'bg-red-900/80', 'bg-yellow-900/80', 'bg-green-900/80', 'bg-blue-900/80', 'bg-indigo-900/80', 'bg-purple-900/80', 'bg-pink-900/80'];
 
 const noteSchema = z.object({
     title: z.string().min(1, 'Title is required'),
     content: z.string().min(1, 'Content is required'),
-    color: z.string()
+    color: z.string(),
+    imageUrl: z.string().nullable(),
+    sourceUrl: z.string().url().or(z.literal('')),
+    tags: z.array(z.string()),
 });
 
 export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit }) {
+    const { uploadFile } = useAppContext(); // Get uploadFile function
+    const [isUploading, setIsUploading] = useState(false);
+    
     const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(noteSchema),
+        defaultValues: {
+            title: '', content: '', color: NOTE_COLORS[0],
+            imageUrl: null, sourceUrl: '', tags: [],
+        }
     });
 
-    const selectedColor = watch('color', noteToEdit?.color || NOTE_COLORS[0]);
+    const [tagInput, setTagInput] = useState('');
+    const selectedColor = watch('color');
+    const imageUrl = watch('imageUrl');
+    const tags = watch('tags');
 
     useEffect(() => {
-        // This effect runs when the modal opens to populate the form
-        // with the note's data if we are editing, or resets it if creating.
-        const defaultValues = {
-            title: noteToEdit?.title || '',
-            content: noteToEdit?.content || '',
-            color: noteToEdit?.color || NOTE_COLORS[0]
-        };
-        reset(defaultValues);
+        if (isOpen) {
+            reset({
+                title: noteToEdit?.title || '',
+                content: noteToEdit?.content || '',
+                color: noteToEdit?.color || NOTE_COLORS[0],
+                imageUrl: noteToEdit?.imageUrl || null,
+                sourceUrl: noteToEdit?.sourceUrl || '',
+                tags: noteToEdit?.tags || [],
+            });
+        }
     }, [isOpen, noteToEdit, reset]);
 
     useEffect(() => {
-        // This effect shows toast notifications for form errors.
-        if (errors.title) toast.error(errors.title.message);
-        if (errors.content) toast.error(errors.content.message);
+        Object.values(errors).forEach(error => {
+            if (error.message) toast.error(error.message);
+        });
     }, [errors]);
 
-    if (!isOpen) {
-        return null;
-    }
+    if (!isOpen) return null;
 
     const onSubmit = (data) => {
         const noteToSave = {
-            ...noteToEdit,
-            ...data,
-            id: noteToEdit?.id,
-            createdAt: noteToEdit?.createdAt || new Date().toISOString()
+            ...noteToEdit, ...data, id: noteToEdit?.id,
         };
         onSave(noteToSave);
     };
 
+    const handleImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        const toastId = toast.loading("Uploading image...");
+
+        try {
+            // Use uploadFile from context
+            const downloadURL = await uploadFile(file, 'note-images');
+            setValue('imageUrl', downloadURL, { shouldValidate: true });
+            toast.success("Image uploaded!", { id: toastId });
+        } catch (error) {
+            console.error("File upload error:", error);
+            toast.error("Upload failed. Please try again.", { id: toastId });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleTagKeyDown = (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            const newTag = tagInput.trim();
+            if (newTag && !tags.includes(newTag)) {
+                setValue('tags', [...tags, newTag], { shouldValidate: true });
+            }
+            setTagInput('');
+        }
+    };
+
+    const removeTag = (tagToRemove) => {
+        setValue('tags', tags.filter(tag => tag !== tagToRemove), { shouldValidate: true });
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-xl shadow-2xl m-4">
+            <div className="bg-gray-900 border border-gray-800 w-full max-w-2xl rounded-xl shadow-2xl m-4">
                 <form onSubmit={handleSubmit(onSubmit)}>
                     <div className="flex items-center justify-between p-6 border-b border-gray-800">
-                        <h3 className="text-xl font-semibold text-white">{noteToEdit ? 'Edit Note' : 'Create New Note'}</h3>
+                        <h3 className="text-xl font-semibold text-white">{noteToEdit ? 'Edit Swipe File Entry' : 'Create Swipe File Entry'}</h3>
                         <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none" aria-label="Close modal">&times;</button>
                     </div>
-                    <div className="p-6 space-y-4">
+                    <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                         <div>
-                            <label htmlFor="noteTitle" className="block text-sm font-medium text-gray-300 mb-1">Note Title</label>
-                            <input {...register("title")} id="noteTitle" placeholder="e.g., Competitor Analysis" className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+                            <label htmlFor="noteImage" className="block text-sm font-medium text-gray-300 mb-1">Ad Creative (Image/Video Screenshot)</label>
+                            <input type="file" id="noteImage" accept="image/*,video/*" onChange={handleImageUpload} disabled={isUploading} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-gray-950 hover:file:bg-yellow-300 disabled:file:bg-gray-500" />
+                            {isUploading && <p className="text-xs text-yellow-400 mt-1">Uploading, please wait...</p>}
+                            {imageUrl && (
+                                <div className="mt-4 relative w-full h-48 bg-gray-800 rounded-lg">
+                                    <Image src={imageUrl} alt="Creative preview" layout="fill" className="object-contain rounded-lg" />
+                                </div>
+                            )}
                         </div>
                         <div>
-                            <label htmlFor="noteContent" className="block text-sm font-medium text-gray-300 mb-1">Content</label>
-                            <textarea {...register("content")} id="noteContent" rows="6" placeholder="Jot down your ideas..." className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"></textarea>
+                            <label htmlFor="noteTitle" className="block text-sm font-medium text-gray-300 mb-1">Title / Headline</label>
+                            <input {...register("title")} id="noteTitle" placeholder="e.g., Awesome Competitor Video Ad" className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+                        </div>
+                        <div>
+                            <label htmlFor="sourceUrl" className="block text-sm font-medium text-gray-300 mb-1">Source URL (Optional)</label>
+                            <input {...register("sourceUrl")} id="sourceUrl" placeholder="e.g., https://facebook.com/ads/library/..." className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+                        </div>
+                        <div>
+                            <label htmlFor="noteContent" className="block text-sm font-medium text-gray-300 mb-1">Analysis / Notes</label>
+                            <textarea {...register("content")} id="noteContent" rows="4" placeholder="Jot down your analysis..." className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"></textarea>
+                        </div>
+                        <div>
+                            <label htmlFor="tags" className="block text-sm font-medium text-gray-300 mb-1">Tags</label>
+                            <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-800 border border-gray-700 rounded-lg">
+                                {tags.map(tag => (
+                                    <div key={tag} className="flex items-center gap-1 bg-blue-900/80 text-blue-300 text-xs font-medium px-2 py-1 rounded-full">
+                                        {tag}
+                                        <button type="button" onClick={() => removeTag(tag)} className="text-blue-200 hover:text-white">&times;</button>
+                                    </div>
+                                ))}
+                                <input id="tags" value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={handleTagKeyDown} placeholder="Add a tag and press Enter" className="flex-1 bg-transparent text-white outline-none" />
+                            </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-300 mb-2">Color</label>
                             <div className="flex gap-3">
                                 {NOTE_COLORS.map(colorClass => (
-                                    <button
-                                        type="button"
-                                        key={colorClass}
-                                        onClick={() => setValue('color', colorClass, { shouldValidate: true })}
-                                        className={`w-8 h-8 rounded-full ${colorClass} transition-transform duration-150 ${selectedColor === colorClass ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white' : 'hover:scale-110'}`}
-                                        aria-label={`Select color ${colorClass.split('-')[1]}`}
-                                    ></button>
+                                    <button type="button" key={colorClass} onClick={() => setValue('color', colorClass)} className={`w-8 h-8 rounded-full ${colorClass} transition-transform duration-150 ${selectedColor === colorClass ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white' : 'hover:scale-110'}`} aria-label={`Select color ${colorClass.split('-')[1]}`}></button>
                                 ))}
                             </div>
                         </div>
                     </div>
                     <div className="flex items-center justify-end p-6 border-t border-gray-800 space-x-2">
                         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
-                        <button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors">Save Note</button>
+                        <button type="submit" className="px-4 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors">Save Entry</button>
                     </div>
                 </form>
             </div>
         </div>
     );
 };
+
 
 │   │   ├── ui\
 │   │   │   ├── ConfirmationModal.js
@@ -2056,10 +2617,9 @@ Path: C:\Users\shop\global-batteries-dashboard\app\context\AppContext.js
 // app/context/AppContext.js
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid'; // We'll need a library to create unique IDs
+import { v4 as uuidv4 } from 'uuid';
 
 // --- Hardcoded Initial Data for Development ---
-// This data will be used to populate the app on first load.
 const initialData = {
   campaigns: [
     {
@@ -2074,8 +2634,16 @@ const initialData = {
       visuals: { "1:1": null, "4:5": null, "9:16": null },
       targetValue: 50000,
       budgetId: 'budget-1',
-      status: 'Planning',
+      status: 'Completed',
       checklist: { primaryText: true, headlines: true, visuals: false, targeting: true, budget: true },
+      // --- NEW: Performance Metrics ---
+      performance: {
+          impressions: 250000,
+          clicks: 7500,
+          spend: 18500,
+          conversions: 120,
+          revenue: 45000,
+      }
     },
      {
       id: 'camp-2',
@@ -2089,8 +2657,16 @@ const initialData = {
       visuals: { "1:1": null, "4:5": null, "9:16": null },
       targetValue: 10000,
       budgetId: 'budget-2',
-      status: 'In Progress',
+      status: 'Live',
       checklist: { primaryText: true, headlines: true, visuals: false, targeting: true, budget: true },
+      // --- NEW: Performance Metrics ---
+      performance: {
+          impressions: 80000,
+          clicks: 1200,
+          spend: 4500,
+          conversions: 5,
+          revenue: 1500,
+      }
     }
   ],
   tasks: [
@@ -2099,12 +2675,30 @@ const initialData = {
     { id: 'task-3', text: 'Finalize budget allocation', priority: 'High', campaign: 'Summer Sale Kickoff', campaignId: 'camp-1', status: 'Done' },
   ],
   notes: [
-    { id: 'note-1', title: 'Q3 Marketing Ideas', content: '- Focus on video content\n- Collaborate with local influencers', color: 'bg-blue-900/80', createdAt: new Date().toISOString() },
-    { id: 'note-2', title: 'Competitor Ad Analysis', content: 'Competitor X is running a big campaign on Facebook. Need to monitor their creatives.', color: 'bg-yellow-900/80', createdAt: new Date().toISOString() },
+    { 
+      id: 'note-1', 
+      title: 'Q3 Marketing Ideas', 
+      content: '- Focus on video content\n- Collaborate with local influencers', 
+      color: 'bg-blue-900/80', 
+      createdAt: new Date().toISOString(),
+      imageUrl: null,
+      sourceUrl: '',
+      tags: ['strategy', 'video'],
+    },
+    { 
+      id: 'note-2', 
+      title: 'Competitor Ad Example', 
+      content: 'This ad from a competitor has a great call-to-action. The use of urgency is very effective.', 
+      color: 'bg-yellow-900/80', 
+      createdAt: new Date().toISOString(),
+      imageUrl: 'https://placehold.co/600x400/1e1b4b/eab308?text=Ad+Screenshot',
+      sourceUrl: 'https://www.facebook.com/ads/library',
+      tags: ['competitor-x', 'strong-cta'],
+    },
   ],
   budgets: [
-     { id: 'budget-1', name: 'Summer Sale Kickoff', branch: 'National', totalBudget: 25000, dailyBudget: 1666, spent: 0, status: 'Planning', startDate: '2024-08-01' },
-     { id: 'budget-2', name: 'Alberton Grand Opening', branch: 'Alberton', totalBudget: 15000, dailyBudget: 500, spent: 1200, status: 'Live', startDate: '2024-09-01' },
+     { id: 'budget-1', name: 'Summer Sale Kickoff', branch: 'National', totalBudget: 25000, dailyBudget: 1666, spent: 18500, status: 'Completed', startDate: '2024-08-01' },
+     { id: 'budget-2', name: 'Alberton Grand Opening', branch: 'Alberton', totalBudget: 15000, dailyBudget: 500, spent: 4500, status: 'Live', startDate: '2024-09-01' },
   ],
 };
 
@@ -2116,11 +2710,8 @@ export function AppProvider({ children }) {
   const [tasks, setTasks] = useState(initialData.tasks);
   const [notes, setNotes] = useState(initialData.notes);
   const [budgets, setBudgets] = useState(initialData.budgets);
-  
-  // Since we are not fetching data, loading is always false.
   const [loading, setLoading] = useState(false);
 
-  // This function will now update our local state instead of Firestore.
   const saveData = (collectionName, data) => {
     const dataToSave = { ...data };
     const stateUpdater = {
@@ -2134,17 +2725,14 @@ export function AppProvider({ children }) {
 
     stateUpdater(prevData => {
       if (dataToSave.id) {
-        // Update existing item
         return prevData.map(item => item.id === dataToSave.id ? dataToSave : item);
       } else {
-        // Add new item with a unique ID
         dataToSave.id = uuidv4();
         return [...prevData, dataToSave];
       }
     });
   };
 
-  // This function will now delete from our local state.
   const deleteData = (collectionName, id) => {
     const stateUpdater = {
       campaigns: setCampaigns,
@@ -2158,22 +2746,18 @@ export function AppProvider({ children }) {
     stateUpdater(prevData => prevData.filter(item => item.id !== id));
   };
 
-  // We remove uploadFile as it's a backend-specific function.
-  // Visuals will be handled as local previews.
-
   const value = {
     campaigns,
     tasks,
     notes,
     budgets,
-    setCampaigns, // Keep setters for import/export functionality
+    setCampaigns,
     setTasks,
     setNotes,
     setBudgets,
     loading,
     saveData,
     deleteData,
-    // uploadFile is removed
   };
 
   return (
@@ -2323,6 +2907,43 @@ export function useTasks() {
 }
 
 │   ├── lib\
+│   │   ├── firebase.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\lib\firebase.js
+--------------------------------------------------------------------------------
+// app/lib/firebase.js
+import { initializeApp, getApps } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getAuth } from "firebase/auth";
+
+// --- This is YOUR Firebase configuration ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDSdnhsw77YysH9WxcMbWoTROwpANXZ3YWG",
+  authDomain: "adflowdashboard.firebaseapp.com",
+  projectId: "adflowdashboard",
+  storageBucket: "adflowdashboard.appspot.com",
+  messagingSenderId: "267813659682",
+  appId: "1:267813659682:web:0147db8058022450841567b"
+};
+// ---------------------------------------------
+
+// Initialize Firebase
+let app;
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApps()[0];
+}
+
+const db = getFirestore(app);
+const storage = getStorage(app);
+const auth = getAuth(app);
+
+export { db, storage, auth };
+
+
 │   ├── notes\
 │   │   ├── NoteClientView.js
 
@@ -2331,14 +2952,14 @@ Path: C:\Users\shop\global-batteries-dashboard\app\notes\NoteClientView.js
 --------------------------------------------------------------------------------
 // app/notes/NoteClientView.js
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Sidebar from '../components/Sidebar';
 import { useAppContext } from '../context/AppContext';
 import toast from 'react-hot-toast';
 import ConfirmationModal from '../components/ui/ConfirmationModal';
 import NoteCard from '../components/notes/NoteCard';
 import NoteEditorModal from '../components/notes/NoteEditorModal';
-import { Plus } from '../components/icons';
+import { Plus, Search } from '../components/icons';
 
 export default function NoteClientView() {
     const { notes, saveData, deleteData, loading } = useAppContext();
@@ -2346,6 +2967,10 @@ export default function NoteClientView() {
     const [noteToEdit, setNoteToEdit] = useState(null);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [noteToDelete, setNoteToDelete] = useState(null);
+
+    // --- NEW: State for filtering and searching ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedTags, setSelectedTags] = useState([]);
 
     const handleSaveNote = async (savedNote) => {
         try {
@@ -2388,23 +3013,42 @@ export default function NoteClientView() {
         }
     };
 
+    // --- NEW: Memoized filtering logic ---
+    const allTags = useMemo(() => {
+        const tagsSet = new Set(notes.flatMap(note => note.tags || []));
+        return Array.from(tagsSet);
+    }, [notes]);
+
+    const filteredNotes = useMemo(() => {
+        return notes
+            .filter(note => {
+                // Search query filter
+                const query = searchQuery.toLowerCase();
+                const inTitle = note.title.toLowerCase().includes(query);
+                const inContent = note.content.toLowerCase().includes(query);
+                const searchMatch = inTitle || inContent;
+
+                // Tags filter
+                const tagsMatch = selectedTags.length === 0 || selectedTags.every(tag => (note.tags || []).includes(tag));
+
+                return searchMatch && tagsMatch;
+            })
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by most recent
+    }, [notes, searchQuery, selectedTags]);
+
+    const handleTagClick = (tag) => {
+        setSelectedTags(prev => 
+            prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+        );
+    };
+
     if (loading) {
+        // Skeleton loading UI remains the same
         return (
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10">
-                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
-                        <div>
-                            <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
-                            <div className="h-5 bg-gray-700 rounded w-72 animate-pulse"></div>
-                        </div>
-                    </header>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
-                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
-                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
-                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
-                    </div>
+                    {/* ... skeleton content ... */}
                 </main>
             </div>
         );
@@ -2417,19 +3061,53 @@ export default function NoteClientView() {
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
                         <div>
-                            <h2 className="text-3xl font-bold text-white">Notes Hub</h2>
-                            <p className="text-gray-400 mt-1">Your space for brainstorming and strategic planning.</p>
+                            <h2 className="text-3xl font-bold text-white">Creative Swipe File</h2>
+                            <p className="text-gray-400 mt-1">Your library of ad inspiration and ideas.</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap" aria-label="Create New Note">
-                                <Plus className="w-5 h-5" /> Create Note
+                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap" aria-label="Create New Entry">
+                                <Plus className="w-5 h-5" /> Add Entry
                             </button>
                         </div>
                     </header>
+
+                    {/* --- NEW: Filter and Search UI --- */}
+                    <div className="flex flex-col md:flex-row gap-4 mb-6 flex-shrink-0">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                            <input
+                                type="text"
+                                placeholder="Search by title or content..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="w-full bg-gray-800 border border-gray-700/50 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                             <span className="text-sm text-gray-400 flex-shrink-0">Filter by Tag:</span>
+                             {allTags.map(tag => (
+                                <button 
+                                    key={tag}
+                                    onClick={() => handleTagClick(tag)}
+                                    className={`px-3 py-1 text-xs font-medium rounded-full transition-colors flex-shrink-0 ${selectedTags.includes(tag) ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                                >
+                                    #{tag}
+                                </button>
+                             ))}
+                        </div>
+                    </div>
+
                     <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-y-auto pb-4">
-                        {notes.map(note => (
-                            <NoteCard key={note.id} note={note} onEdit={handleOpenEditModal} onDelete={handleDelete} />
-                        ))}
+                        {filteredNotes.length > 0 ? (
+                            filteredNotes.map(note => (
+                                <NoteCard key={note.id} note={note} onEdit={handleOpenEditModal} onDelete={handleDelete} />
+                            ))
+                        ) : (
+                            <div className="col-span-full flex flex-col items-center justify-center text-center text-gray-500 h-full">
+                                <p className="text-lg font-semibold">No Matching Notes Found</p>
+                                <p>Try adjusting your search or filters.</p>
+                            </div>
+                        )}
                     </div>
                 </main>
                 <NoteEditorModal isOpen={isEditorOpen} onClose={() => setEditorOpen(false)} onSave={handleSaveNote} noteToEdit={noteToEdit} />
@@ -2437,12 +3115,13 @@ export default function NoteClientView() {
                     isOpen={isConfirmOpen}
                     onClose={() => setConfirmOpen(false)}
                     onConfirm={confirmDelete}
-                    message="Are you sure you want to delete this note?"
+                    message="Are you sure you want to delete this entry?"
                 />
             </div>
         </div>
     );
 }
+
 
 │   │   ├── page.js
 

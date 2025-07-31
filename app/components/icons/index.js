@@ -15,3 +15,6 @@ export { default as Target } from './Target';
 export { default as Trello } from './Trello';
 export { default as Trash2 } from './Trash2';
 export { default as Upload } from './Upload';
+export { default as TrendingUp } from './TrendingUp';
+export { default as Link } from './Link';
+export { default as Search } from './Search'; // <-- Add this line

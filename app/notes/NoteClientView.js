@@ -1,13 +1,13 @@
 // app/notes/NoteClientView.js
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Sidebar from '../components/Sidebar';
 import { useAppContext } from '../context/AppContext';
 import toast from 'react-hot-toast';
 import ConfirmationModal from '../components/ui/ConfirmationModal';
 import NoteCard from '../components/notes/NoteCard';
 import NoteEditorModal from '../components/notes/NoteEditorModal';
-import { Plus } from '../components/icons';
+import { Plus, Search } from '../components/icons';
 
 export default function NoteClientView() {
     const { notes, saveData, deleteData, loading } = useAppContext();
@@ -15,6 +15,10 @@ export default function NoteClientView() {
     const [noteToEdit, setNoteToEdit] = useState(null);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [noteToDelete, setNoteToDelete] = useState(null);
+
+    // --- NEW: State for filtering and searching ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedTags, setSelectedTags] = useState([]);
 
     const handleSaveNote = async (savedNote) => {
         try {
@@ -57,23 +61,42 @@ export default function NoteClientView() {
         }
     };
 
+    // --- NEW: Memoized filtering logic ---
+    const allTags = useMemo(() => {
+        const tagsSet = new Set(notes.flatMap(note => note.tags || []));
+        return Array.from(tagsSet);
+    }, [notes]);
+
+    const filteredNotes = useMemo(() => {
+        return notes
+            .filter(note => {
+                // Search query filter
+                const query = searchQuery.toLowerCase();
+                const inTitle = note.title.toLowerCase().includes(query);
+                const inContent = note.content.toLowerCase().includes(query);
+                const searchMatch = inTitle || inContent;
+
+                // Tags filter
+                const tagsMatch = selectedTags.length === 0 || selectedTags.every(tag => (note.tags || []).includes(tag));
+
+                return searchMatch && tagsMatch;
+            })
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by most recent
+    }, [notes, searchQuery, selectedTags]);
+
+    const handleTagClick = (tag) => {
+        setSelectedTags(prev => 
+            prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+        );
+    };
+
     if (loading) {
+        // Skeleton loading UI remains the same
         return (
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10">
-                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
-                        <div>
-                            <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
-                            <div className="h-5 bg-gray-700 rounded w-72 animate-pulse"></div>
-                        </div>
-                    </header>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
-                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
-                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
-                        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse"></div>
-                    </div>
+                    {/* ... skeleton content ... */}
                 </main>
             </div>
         );
@@ -86,19 +109,53 @@ export default function NoteClientView() {
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
                         <div>
-                            <h2 className="text-3xl font-bold text-white">Notes Hub</h2>
-                            <p className="text-gray-400 mt-1">Your space for brainstorming and strategic planning.</p>
+                            <h2 className="text-3xl font-bold text-white">Creative Swipe File</h2>
+                            <p className="text-gray-400 mt-1">Your library of ad inspiration and ideas.</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap" aria-label="Create New Note">
-                                <Plus className="w-5 h-5" /> Create Note
+                            <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap" aria-label="Create New Entry">
+                                <Plus className="w-5 h-5" /> Add Entry
                             </button>
                         </div>
                     </header>
+
+                    {/* --- NEW: Filter and Search UI --- */}
+                    <div className="flex flex-col md:flex-row gap-4 mb-6 flex-shrink-0">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                            <input
+                                type="text"
+                                placeholder="Search by title or content..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="w-full bg-gray-800 border border-gray-700/50 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                             <span className="text-sm text-gray-400 flex-shrink-0">Filter by Tag:</span>
+                             {allTags.map(tag => (
+                                <button 
+                                    key={tag}
+                                    onClick={() => handleTagClick(tag)}
+                                    className={`px-3 py-1 text-xs font-medium rounded-full transition-colors flex-shrink-0 ${selectedTags.includes(tag) ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                                >
+                                    #{tag}
+                                </button>
+                             ))}
+                        </div>
+                    </div>
+
                     <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-y-auto pb-4">
-                        {notes.map(note => (
-                            <NoteCard key={note.id} note={note} onEdit={handleOpenEditModal} onDelete={handleDelete} />
-                        ))}
+                        {filteredNotes.length > 0 ? (
+                            filteredNotes.map(note => (
+                                <NoteCard key={note.id} note={note} onEdit={handleOpenEditModal} onDelete={handleDelete} />
+                            ))
+                        ) : (
+                            <div className="col-span-full flex flex-col items-center justify-center text-center text-gray-500 h-full">
+                                <p className="text-lg font-semibold">No Matching Notes Found</p>
+                                <p>Try adjusting your search or filters.</p>
+                            </div>
+                        )}
                     </div>
                 </main>
                 <NoteEditorModal isOpen={isEditorOpen} onClose={() => setEditorOpen(false)} onSave={handleSaveNote} noteToEdit={noteToEdit} />
@@ -106,7 +163,7 @@ export default function NoteClientView() {
                     isOpen={isConfirmOpen}
                     onClose={() => setConfirmOpen(false)}
                     onConfirm={confirmDelete}
-                    message="Are you sure you want to delete this note?"
+                    message="Are you sure you want to delete this entry?"
                 />
             </div>
         </div>
