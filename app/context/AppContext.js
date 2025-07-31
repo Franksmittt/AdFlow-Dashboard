@@ -1,126 +1,126 @@
 // app/context/AppContext.js
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, storage } from './firebase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, orderBy } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import toast from 'react-hot-toast';
+import { v4 as uuidv4 } from 'uuid'; // We'll need a library to create unique IDs
+
+// --- Hardcoded Initial Data for Development ---
+// This data will be used to populate the app on first load.
+const initialData = {
+  campaigns: [
+    {
+      id: 'camp-1',
+      name: 'Summer Sale Kickoff',
+      branch: 'National',
+      objective: 'Sales',
+      startDate: '2024-08-01',
+      endDate: '2024-08-15',
+      primaryText: 'Get ready for the hottest deals of the summer!',
+      headlines: ['50% Off Everything!', 'Limited Time Only'],
+      visuals: { "1:1": null, "4:5": null, "9:16": null },
+      targetValue: 50000,
+      budgetId: 'budget-1',
+      status: 'Planning',
+      checklist: { primaryText: true, headlines: true, visuals: false, targeting: true, budget: true },
+    },
+     {
+      id: 'camp-2',
+      name: 'New Branch Opening',
+      branch: 'Alberton',
+      objective: 'Brand Awareness',
+      startDate: '2024-09-01',
+      endDate: '2024-09-30',
+      primaryText: 'Come visit our new Alberton location!',
+      headlines: ['Grand Opening Specials', 'Free Gifts for First 100 Customers'],
+      visuals: { "1:1": null, "4:5": null, "9:16": null },
+      targetValue: 10000,
+      budgetId: 'budget-2',
+      status: 'In Progress',
+      checklist: { primaryText: true, headlines: true, visuals: false, targeting: true, budget: true },
+    }
+  ],
+  tasks: [
+    { id: 'task-1', text: 'Design visuals for Summer Sale', priority: 'High', campaign: 'Summer Sale Kickoff', campaignId: 'camp-1', status: 'To Do' },
+    { id: 'task-2', text: 'Write ad copy for Alberton opening', priority: 'Medium', campaign: 'New Branch Opening', campaignId: 'camp-2', status: 'In Progress' },
+    { id: 'task-3', text: 'Finalize budget allocation', priority: 'High', campaign: 'Summer Sale Kickoff', campaignId: 'camp-1', status: 'Done' },
+  ],
+  notes: [
+    { id: 'note-1', title: 'Q3 Marketing Ideas', content: '- Focus on video content\n- Collaborate with local influencers', color: 'bg-blue-900/80', createdAt: new Date().toISOString() },
+    { id: 'note-2', title: 'Competitor Ad Analysis', content: 'Competitor X is running a big campaign on Facebook. Need to monitor their creatives.', color: 'bg-yellow-900/80', createdAt: new Date().toISOString() },
+  ],
+  budgets: [
+     { id: 'budget-1', name: 'Summer Sale Kickoff', branch: 'National', totalBudget: 25000, dailyBudget: 1666, spent: 0, status: 'Planning', startDate: '2024-08-01' },
+     { id: 'budget-2', name: 'Alberton Grand Opening', branch: 'Alberton', totalBudget: 15000, dailyBudget: 500, spent: 1200, status: 'Live', startDate: '2024-09-01' },
+  ],
+};
+
 
 const AppContext = createContext();
+
 export function AppProvider({ children }) {
-  const [campaigns, setCampaigns] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [notes, setNotes] = useState([]);
-  const [budgets, setBudgets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [campaigns, setCampaigns] = useState(initialData.campaigns);
+  const [tasks, setTasks] = useState(initialData.tasks);
+  const [notes, setNotes] = useState(initialData.notes);
+  const [budgets, setBudgets] = useState(initialData.budgets);
+  
+  // Since we are not fetching data, loading is always false.
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const collectionsToFetch = {
-      campaigns: { setter: setCampaigns, q: query(collection(db, 'campaigns'), orderBy('startDate', 'desc')) },
-      tasks: { setter: setTasks, q: query(collection(db, 'tasks')) },
-      notes: { setter: setNotes, q: query(collection(db, 'notes'), orderBy('createdAt', 'desc')) },
-      budgets: { setter: setBudgets, q: query(collection(db, 'budgets'), orderBy('startDate', 'desc')) },
-    };
-
-    const totalCollections = Object.keys(collectionsToFetch).length;
-    let loadedCount = 0;
-
-    // Set a timeout to prevent the app from getting stuck in a loading state
-    const loadingTimeout = setTimeout(() => {
-        if (loading) {
-            console.warn("Data loading timed out. Some collections may not have loaded.");
-            toast.error("Some data failed to load. The app may be running with partial data.");
-            setLoading(false);
-        }
-    }, 10000); // 10-second timeout
-
-    const unsubs = Object.entries(collectionsToFetch).map(([name, { setter, q }]) =>
-      onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setter(data);
-
-        // Check if this is the first time this collection has loaded
-        if (loading) {
-            loadedCount++;
-            if (loadedCount === totalCollections) {
-                clearTimeout(loadingTimeout); // Clear timeout if all data loads successfully
-                setLoading(false);
-            }
-        }
-      }, (error) => {
-        console.error(`Error fetching collection '${name}':`, error);
-        toast.error(`Failed to load ${name}. Please try again.`);
-        if (loading) {
-            loadedCount++;
-            if (loadedCount === totalCollections) {
-                clearTimeout(loadingTimeout);
-                setLoading(false);
-            }
-        }
-      })
-    );
-    // Cleanup function to unsubscribe from listeners and clear the timeout
-    return () => {
-        unsubs.forEach(unsub => unsub());
-        clearTimeout(loadingTimeout);
-    };
-  }, []); // The empty dependency array ensures this effect runs only once on mount
-
-  const saveData = async (collectionName, data) => {
+  // This function will now update our local state instead of Firestore.
+  const saveData = (collectionName, data) => {
     const dataToSave = { ...data };
-    // Remove undefined fields before saving to Firestore
-    Object.keys(dataToSave).forEach(key => {
-        if (dataToSave[key] === undefined) {
-            delete dataToSave[key];
-        }
+    const stateUpdater = {
+      campaigns: setCampaigns,
+      tasks: setTasks,
+      notes: setNotes,
+      budgets: setBudgets,
+    }[collectionName];
+
+    if (!stateUpdater) return;
+
+    stateUpdater(prevData => {
+      if (dataToSave.id) {
+        // Update existing item
+        return prevData.map(item => item.id === dataToSave.id ? dataToSave : item);
+      } else {
+        // Add new item with a unique ID
+        dataToSave.id = uuidv4();
+        return [...prevData, dataToSave];
+      }
     });
-    try {
-        if (data.id) {
-            const docRef = doc(db, collectionName, data.id);
-            // Use set with merge:true to update or create, preventing accidental data loss
-            await setDoc(docRef, dataToSave, { merge: true });
-        } else {
-            await addDoc(collection(db, collectionName), dataToSave);
-        }
-    } catch (error) {
-        console.error(`Error saving data to ${collectionName}:`, error);
-        throw new Error(`Failed to save data: ${error.message}`);
-    }
   };
-  const deleteData = async (collectionName, id) => {
-    try {
-        await deleteDoc(doc(db, collectionName, id));
-    } catch (error) {
-        console.error(`Error deleting data from ${collectionName}:`, error);
-        throw new Error(`Failed to delete data: ${error.message}`);
-    }
+
+  // This function will now delete from our local state.
+  const deleteData = (collectionName, id) => {
+    const stateUpdater = {
+      campaigns: setCampaigns,
+      tasks: setTasks,
+      notes: setNotes,
+      budgets: setBudgets,
+    }[collectionName];
+
+    if (!stateUpdater) return;
+
+    stateUpdater(prevData => prevData.filter(item => item.id !== id));
   };
-  const uploadFile = async (file, path) => {
-    const storageRef = ref(storage, path);
-    try {
-        await uploadBytes(storageRef, file);
-        const downloadURL = await getDownloadURL(storageRef);
-        return downloadURL;
-    } catch (error) {
-        console.error("Error uploading file:", error);
-        throw new Error("Failed to upload file.");
-    }
-  };
+
+  // We remove uploadFile as it's a backend-specific function.
+  // Visuals will be handled as local previews.
 
   const value = {
     campaigns,
     tasks,
     notes,
     budgets,
-    setCampaigns,
+    setCampaigns, // Keep setters for import/export functionality
     setTasks,
     setNotes,
     setBudgets,
     loading,
     saveData,
     deleteData,
-    uploadFile,
+    // uploadFile is removed
   };
+
   return (
     <AppContext.Provider value={value}>
       {children}

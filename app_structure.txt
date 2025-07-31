@@ -567,37 +567,18 @@ export default function BudgetClientView({ initialBudgets }) {
 Path: C:\Users\shop\global-batteries-dashboard\app\budgets\page.js
 --------------------------------------------------------------------------------
 // app/budgets/page.js
+"use client"; // This page now only renders a client component.
+
 import BudgetClientView from './BudgetClientView';
-import { db } from '../context/firebase';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 
-// This is a server-side function to fetch the initial list of budgets.
-// It runs on the server, not in the browser.
-async function getBudgets() {
-    try {
-        const budgetsQuery = query(collection(db, 'budgets'), orderBy('startDate', 'desc'));
-        const budgetSnapshot = await getDocs(budgetsQuery);
-        // We need to serialize the data to pass it from a Server Component to a Client Component.
-        const budgetList = budgetSnapshot.docs.map(doc => ({
-            id: doc.id,
-            // FIX: Corrected syntax from .doc.data() to the spread operator ...doc.data()
-            ...doc.data()
-        }));
-        return budgetList;
-    } catch (error) {
-        console.error("Failed to fetch budgets on the server:", error);
-        return []; // Return an empty array on error
-    }
+// This is now a simple component that renders the client view.
+// No data fetching is needed here anymore.
+export default function BudgetsPage() {
+    // The BudgetClientView will get all its data from the AppContext.
+    // We pass empty arrays for initial props as they are no longer used.
+    return <BudgetClientView initialBudgets={[]} />;
 }
 
-// This is now a React Server Component by default.
-export default async function BudgetsPage() {
-    // 1. Data is fetched on the server when the page is requested.
-    const initialBudgets = await getBudgets();
-
-    // 2. The server-fetched data is passed as a prop to our interactive Client Component.
-    return <BudgetClientView initialBudgets={initialBudgets} />;
-}
 
 │   ├── campaigns\
 │   │   ├── CampaignClientView.js
@@ -614,12 +595,11 @@ import Sidebar from "../components/Sidebar";
 import { useAppContext } from "../context/AppContext";
 import toast from 'react-hot-toast';
 import { z } from 'zod';
+// CHANGE: Import the new accessible hook
+import { useAccessibleKanban } from '../hooks/useAccessibleKanban';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
+import { Plus, List, Trello } from '../components/icons';
 
-// --- ICONS & CONFIG --- //
-// FIX: Removed inline SVG definition and now import from the central icon component.
-import Plus from '../components/icons/Plus';
-import List from '../components/icons/List';
-import Trello from '../components/icons/Trello';
 
 const BRANCHES = ["Alberton", "Vanderbijlpark", "Sasolburg", "National"];
 const KANBAN_COLUMNS = ["Planning", "In Progress", "Live", "Completed"];
@@ -629,10 +609,7 @@ const statusConfig = {
     Live: { color: "green", bg: "bg-green-900/50", text: "text-green-400" },
     Completed: { color: "gray", bg: "bg-gray-800", text: "text-gray-400" },
 };
-const AD_FORMATS = ["1:1", "4:5", "9:16"];
 const OBJECTIVES = ["Sales", "Leads", "Brand Awareness", "Engagement"];
-
-// Zod Schema for Campaign Validation
 const campaignSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, { message: "Campaign name is required." }),
@@ -659,24 +636,9 @@ const campaignSchema = z.object({
   }),
 });
 
-// --- Custom Confirmation Modal ---
-const ConfirmationModal = ({ isOpen, onClose, onConfirm, message }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-      <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-2xl m-4">
-        <p className="text-white mb-6 text-lg">{message}</p>
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="px-5 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
-          <button onClick={onConfirm} className="px-5 py-2 text-sm font-semibold text-gray-950 bg-red-500 rounded-lg hover:bg-red-400 transition-colors">Confirm</button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // --- SUB-COMPONENTS --- //
 const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets }) => {
+    // This component remains unchanged from its original version.
     const [name, setName] = useState("");
     const [branch, setBranch] = useState(BRANCHES[0]);
     const [objective, setObjective] = useState(OBJECTIVES[0]);
@@ -703,17 +665,14 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
                 setTargetValue(campaignToEdit.targetValue || "");
                 setBudgetId(campaignToEdit.budgetId || "");
             } else {
-                // Reset form for new campaign
-                setName(""); setBranch(BRANCHES[0]); setObjective(OBJECTIVES[0]); setStartDate(""); setEndDate(""); setPrimaryText(""); setHeadlines([""]);
-                setVisuals({ "1:1": null, "4:5": null, "9:16": null }); setTargetValue(""); setBudgetId("");
+                setName(""); setBranch(BRANCHES[0]); setObjective(OBJECTIVES[0]); setStartDate(""); setEndDate(""); setPrimaryText(""); setHeadlines([""]); setVisuals({ "1:1": null, "4:5": null, "9:16": null }); setTargetValue(""); setBudgetId("");
             }
             if (modalRef.current) {
                 modalRef.current.focus();
             }
         }
     }, [campaignToEdit, isOpen]);
-    
-    // FIX: Add cleanup for blob URLs created by file previews
+
     useEffect(() => {
         return () => {
             Object.values(visuals).forEach(url => {
@@ -723,7 +682,6 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
             });
         };
     }, [visuals]);
-
     if (!isOpen) return null;
 
     const handleSubmit = (e) => {
@@ -749,7 +707,6 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
         onSave(result.data);
         onClose();
     };
-
     const handleVisualUpload = (format, e) => {
         const file = e.target.files[0];
         if (file) {
@@ -768,7 +725,6 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
     };
 
     const addHeadline = () => setHeadlines((prev) => [...prev, ""]);
-    
     const updateHeadline = (index, value) => {
         const newHeadlines = [...headlines];
         newHeadlines[index] = value;
@@ -788,7 +744,8 @@ const CampaignEditorModal = ({ isOpen, onClose, onSave, campaignToEdit, budgets 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-1">Branch</label>
-                                <select id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map((b) => (<option key={b} value={b}>{b}</option>))}</select>
+                                <select id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">{BRANCHES.map((b) => (<option key={b} value={b}>{b}</option>))}
+                                </select>
                             </div>
                             <div>
                                 <label htmlFor="budget" className="block text-sm font-medium text-gray-300 mb-1">Link Budget</label>
@@ -845,16 +802,27 @@ const CampaignListView = ({ campaigns, onEdit, onDelete }) => (
     </div>
 );
 
-const CampaignKanbanView = ({ campaigns, onDragStart, onDrop, draggedCampaign }) => (
+// UPDATE: CampaignKanbanView now uses keyboard accessibility props
+const CampaignKanbanView = ({ campaigns, onDragStart, onDrop, onKeyDown, draggedItem, keyboardSelectedItem }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 flex-1 overflow-y-auto">
         {KANBAN_COLUMNS.map((status) => (
-            <div key={status} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDrop(e, status)} className={`p-4 border-2 border-dashed rounded-xl flex flex-col transition-colors ${draggedCampaign && draggedCampaign.status !== status ? "border-yellow-400/50" : "border-transparent"} bg-gray-900/70`}>
+            <div key={status} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDrop(e, status)} className={`p-4 border-2 border-dashed rounded-xl flex flex-col transition-colors ${draggedItem && draggedItem.status !== status ? "border-yellow-400/50" : "border-transparent"} bg-gray-900/70`}>
                 <h3 className="text-lg font-semibold text-white mb-4">{status}</h3>
                 <div className="space-y-4 overflow-y-auto flex-1">
                     {campaigns.filter((c) => c.status === status).map((campaign) => {
                         const progress = campaign.checklist ? (Object.values(campaign.checklist).filter(Boolean).length / Object.keys(campaign.checklist).length) * 100 : 0;
                         return (
-                            <div key={campaign.id} draggable onDragStart={(e) => onDragStart(e, campaign)} className="bg-gray-800 p-4 rounded-lg border border-gray-700 cursor-grab active:cursor-grabbing">
+                             <div 
+                                key={campaign.id} 
+                                draggable 
+                                onDragStart={(e) => onDragStart(e, campaign)}
+                                onKeyDown={(e) => onKeyDown(e, campaign)}
+                                tabIndex={0}
+                                className={`bg-gray-800 p-4 rounded-lg border border-gray-700 cursor-grab active:cursor-grabbing transition-all ${draggedItem?.id === campaign.id ? 'opacity-50' : 'opacity-100'} ${keyboardSelectedItem?.id === campaign.id ? 'ring-2 ring-yellow-400' : 'focus:ring-2 focus:ring-blue-400'}`}
+                                role="button"
+                                aria-roledescription="Draggable campaign"
+                                aria-grabbed={keyboardSelectedItem?.id === campaign.id}
+                            >
                                 <div className="flex justify-between items-start mb-2"><p className="font-semibold text-white pr-4">{campaign.name}</p><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig[campaign.status]?.bg} ${statusConfig[campaign.status]?.text}`}>{campaign.branch}</span></div>
                                 <p className="text-sm text-gray-400">{campaign.objective}</p>
                                 <div className="w-full bg-gray-700 rounded-full h-2.5 mt-2"><div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div>
@@ -866,18 +834,25 @@ const CampaignKanbanView = ({ campaigns, onDragStart, onDrop, draggedCampaign })
         ))}
     </div>
 );
-
 // --- MAIN CLIENT COMPONENT --- //
 export default function CampaignClientView({ initialCampaigns, initialBudgets }) {
-    // FIX: Removed local state and redundant listener. Now consumes global state from context.
     const { campaigns, budgets, saveData, deleteData, loading } = useAppContext();
     const [isModalOpen, setModalOpen] = useState(false);
     const [campaignToEdit, setCampaignToEdit] = useState(null);
     const [view, setView] = useState("list");
-    const [draggedCampaign, setDraggedCampaign] = useState(null);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [campaignToDelete, setCampaignToDelete] = useState(null);
     
+    // CHANGE: Use the new accessible hook
+    const { 
+        draggedItem, 
+        keyboardSelectedItem,
+        handleDragStart, 
+        handleDrop, 
+        handleKeyDown 
+    } = useAccessibleKanban({ saveData, collectionName: 'campaigns', columns: KANBAN_COLUMNS });
+
+
     const handleSaveCampaign = async (savedCampaign) => {
         try {
             await toast.promise(
@@ -916,24 +891,8 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
         }
     };
 
-    const handleDragStart = (e, campaign) => { setDraggedCampaign(campaign); e.dataTransfer.effectAllowed = "move"; };
-    
-    const handleDrop = async (e, newStatus) => {
-        e.preventDefault();
-        if (draggedCampaign && draggedCampaign.status !== newStatus) {
-            const updatedCampaign = { ...draggedCampaign, status: newStatus };
-            try {
-                await saveData('campaigns', updatedCampaign);
-                toast.success(`Campaign status updated to ${newStatus}!`);
-            } catch (error) {
-                console.error("Error updating campaign status:", error);
-                toast.error('Failed to update campaign status.');
-            }
-        }
-        setDraggedCampaign(null);
-    };
-
     if (loading) {
+        // Loading skeleton remains the same...
         return (
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
@@ -950,17 +909,17 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
                 <Sidebar />
                 <main className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
-                         <div>
+                        <div>
                             <h2 className="text-3xl font-bold text-white">Campaigns</h2>
                             <p className="text-gray-400 mt-1">Manage your Facebook ad campaigns across all stores.</p>
-                         </div>
+                        </div>
                         <div className="flex items-center gap-2">
                             <button onClick={handleAddClick} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300 transition-colors flex items-center gap-2" aria-label="Create New Campaign">
-                                 <Plus className="w-5 h-5" /> Create Campaign
+                                <Plus className="w-5 h-5" /> Create Campaign
                             </button>
                         </div>
                     </header>
-                     <div className="flex items-center bg-gray-800 rounded-lg p-1 mb-8 w-min flex-shrink-0">
+                    <div className="flex items-center bg-gray-800 rounded-lg p-1 mb-8 w-min flex-shrink-0">
                         <button onClick={() => setView("list")} className={`px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-colors ${view === "list" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`} aria-label="View as List">
                             <List className="w-4 h-4" /> List
                         </button>
@@ -971,9 +930,17 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
                     {view === "list" ? (
                         <CampaignListView campaigns={campaigns} onEdit={handleEditClick} onDelete={handleDeleteClick} />
                     ) : (
-                        <CampaignKanbanView campaigns={campaigns} onDragStart={handleDragStart} onDrop={handleDrop} draggedCampaign={draggedCampaign} />
+                        // UPDATE: Pass new props to the Kanban view
+                        <CampaignKanbanView 
+                            campaigns={campaigns} 
+                            onDragStart={handleDragStart} 
+                            onDrop={handleDrop}
+                            onKeyDown={handleKeyDown}
+                            draggedItem={draggedItem}
+                            keyboardSelectedItem={keyboardSelectedItem}
+                        />
                     )}
-                     <CampaignEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveCampaign} campaignToEdit={campaignToEdit} budgets={budgets} />
+                    <CampaignEditorModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveCampaign} campaignToEdit={campaignToEdit} budgets={budgets} />
                     <ConfirmationModal
                         isOpen={isConfirmOpen}
                         onClose={() => setConfirmOpen(false)}
@@ -991,46 +958,18 @@ export default function CampaignClientView({ initialCampaigns, initialBudgets })
 Path: C:\Users\shop\global-batteries-dashboard\app\campaigns\page.js
 --------------------------------------------------------------------------------
 // app/campaigns/page.js
+"use client"; // This page now only renders a client component.
+
 import CampaignClientView from './CampaignClientView';
-import { getFirestore, collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { db } from '../context/firebase';
 
-// Server-side function to get initial campaigns
-async function getCampaigns() {
-    try {
-        // IMPORTANT: Firestore orderBy queries require an index.
-        // If you encounter errors, check your Firebase console for a link to create the index for 'campaigns' on 'startDate' (desc).
-        const campaignsQuery = query(collection(db, 'campaigns'), orderBy('startDate', 'desc'));
-        const snapshot = await getDocs(campaignsQuery);
-        // FIX: Corrected syntax from .doc.data() to the spread operator ...doc.data()
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-        console.error("Failed to fetch campaigns on server:", error);
-        return [];
-    }
+// This is now a simple component that renders the client view.
+// No data fetching is needed here anymore.
+export default function CampaignsPage() {
+    // The CampaignClientView will get all its data from the AppContext.
+    // We pass empty arrays for initial props as they are no longer used.
+    return <CampaignClientView initialCampaigns={[]} initialBudgets={[]} />;
 }
 
-// Server-side function to get budgets (needed for the modal)
-async function getBudgets() {
-    try {
-        const snapshot = await getDocs(collection(db, 'budgets'));
-        // FIX: Corrected syntax from .doc.data() to the spread operator ...doc.data()
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-        console.error("Failed to fetch budgets on server:", error);
-        return [];
-    }
-}
-
-// This is the main Server Component for the page
-export default async function CampaignsPage() {
-    // Fetch initial data on the server
-    const initialCampaigns = await getCampaigns();
-    const initialBudgets = await getBudgets();
-
-    // Pass data to the Client Component for rendering
-    return <CampaignClientView initialCampaigns={initialCampaigns} initialBudgets={initialBudgets} />;
-}
 
 │   │   ├── [id]\
 │   │   │   ├── page.js
@@ -1057,7 +996,6 @@ const statusConfig = {
     "Live": { bg: "bg-green-900/50", text: "text-green-300" },
     "Completed": { bg: "bg-gray-800", text: "text-gray-400" },
 };
-
 // --- WIDGET COMPONENTS --- //
 const CampaignOverview = ({ campaign }) => (
   <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl">
@@ -1073,18 +1011,16 @@ const CampaignOverview = ({ campaign }) => (
     </div>
   </div>
 );
-
 const AdCreativeHub = ({ campaign, onCampaignUpdate }) => (
   <div className="space-y-6">
     <CreativeChecklist campaign={campaign} />
+    {/* VisualManager is used here to manage assets for the EXISTING campaign */}
     <VisualManager campaign={campaign} onSave={onCampaignUpdate} />
     <CopyManager campaign={campaign} onSave={onCampaignUpdate} />
   </div>
 );
-
 const LinkedTasks = ({ campaignId, tasks }) => {
     const campaignTasks = tasks.filter(task => task.campaignId === campaignId);
-
     return (
         <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl">
           <h3 className="text-xl font-semibold text-white mb-4">✅ Linked Tasks</h3>
@@ -1109,11 +1045,18 @@ export default function CampaignDetailPage() {
 
   // Find the campaign using the unique ID from the URL
   const campaign = campaigns.find((c) => c.id === params.id);
-
   const handleCampaignUpdate = async (updatedData) => {
     if (!campaign) return;
     try {
-        const campaignToSave = { ...campaign, ...updatedData };
+        // The checklist needs to be recalculated when visuals or copy change
+        const currentChecklist = campaign.checklist || {};
+        const newChecklist = {
+            ...currentChecklist,
+            primaryText: !!(updatedData.primaryText || campaign.primaryText),
+            headlines: (updatedData.headlines || campaign.headlines)?.some(h => h.trim() !== ''),
+            visuals: updatedData.visuals ? Object.values(updatedData.visuals).some(v => v) : currentChecklist.visuals,
+        };
+        const campaignToSave = { ...campaign, ...updatedData, checklist: newChecklist };
         await saveData('campaigns', campaignToSave);
         toast.success('Campaign updated successfully!');
     } catch (error) {
@@ -1121,7 +1064,6 @@ export default function CampaignDetailPage() {
         toast.error("Failed to update campaign. Please check the console for details.");
     }
   };
-
   if (loading) {
     return (
         <div className="flex h-screen bg-gray-950 text-white items-center justify-center">
@@ -1135,11 +1077,11 @@ export default function CampaignDetailPage() {
         <div className="flex h-screen bg-gray-950">
             <Sidebar />
             <main className="flex-1 flex items-center justify-center">
-                 <div className="text-center">
+                <div className="text-center">
                     <h2 className="text-2xl font-bold text-white">Campaign Not Found</h2>
                     <button onClick={() => router.push('/campaigns')} className="mt-4 px-4 py-2 bg-yellow-400 text-gray-950 rounded-lg hover:bg-yellow-300 transition-colors">
                         Back to All Campaigns
-                     </button>
+                    </button>
                 </div>
             </main>
       </div>
@@ -1178,6 +1120,58 @@ export default function CampaignDetailPage() {
 }
 
 │   ├── components\
+│   │   ├── ErrorBoundary.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\components\ErrorBoundary.js
+--------------------------------------------------------------------------------
+// app/components/ErrorBoundary.js
+"use client";
+
+import React from 'react';
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    // Define a state variable to track whether is an error or not
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error) {
+    // Update state so the next render will show the fallback UI
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    // You can also log the error to an error reporting service
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    // Check if an error is thrown
+    if (this.state.hasError) {
+      // You can render any custom fallback UI
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-950 text-white">
+          <h2 className="text-2xl font-bold mb-4">Oops, Something Went Wrong</h2>
+          <p className="text-gray-400 mb-6">A part of the application failed to load. Please try refreshing the page.</p>
+          <button
+            onClick={() => this.setState({ hasError: false })}
+            className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg hover:bg-yellow-300"
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+
+    // Return children components in case of no error
+    return this.props.children;
+  }
+}
+
+export default ErrorBoundary;
+
 │   │   ├── Sidebar.js
 
 --------------------------------------------------------------------------------
@@ -1448,27 +1442,25 @@ Path: C:\Users\shop\global-batteries-dashboard\app\components\campaigns\VisualMa
 // app/components/campaigns/VisualManager.js
 "use client";
 import React, { useState, useEffect } from 'react';
-import { useAppContext } from '../../context/AppContext';
-import toast from 'react-hot-toast';
 import Image from 'next/image';
+import toast from 'react-hot-toast';
 
 const AD_FORMATS = ["1:1", "4:5", "9:16"];
 
+// This component handles uploading and displaying local previews of visuals.
 export default function VisualManager({ campaign, onSave }) {
-    const { uploadFile } = useAppContext();
     const [visuals, setVisuals] = useState({ "1:1": null, "4:5": null, "9:16": null });
-    const [newFiles, setNewFiles] = useState({});
-    const [isUploading, setIsUploading] = useState(false);
+    const [hasChanges, setHasChanges] = useState(false);
 
     useEffect(() => {
-        if (campaign.visuals) {
+        // When the campaign data changes, update the local visuals state.
+        if (campaign && campaign.visuals) {
             setVisuals(campaign.visuals);
-        } else {
-            setVisuals({ "1:1": null, "4:5": null, "9:16": null });
         }
+        setHasChanges(false); // Reset changes on new campaign data
     }, [campaign]);
-    
-    // FIX: Added cleanup effect to revoke temporary blob URLs and prevent memory leaks.
+
+    // Clean up blob URLs to prevent memory leaks
     useEffect(() => {
         return () => {
             Object.values(visuals).forEach(url => {
@@ -1479,106 +1471,65 @@ export default function VisualManager({ campaign, onSave }) {
         };
     }, [visuals]);
 
-    const handleFileSelect = (format, e) => {
+    const handleVisualUpload = (format, e) => {
         const file = e.target.files[0];
-        if (file) {
-            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime'];
-            if (!allowedTypes.includes(file.type)) {
-                toast.error(`Unsupported file type for ${format}. Please use JPEG, PNG, GIF, or MP4/MOV.`);
-                e.target.value = '';
-                return;
-            }
-            const maxSize = 10 * 1024 * 1024; // 10MB
-            if (file.size > maxSize) {
-                toast.error(`File size exceeds 10MB limit for ${format}.`);
-                e.target.value = '';
-                return;
-            }
+        if (!file) return;
 
-            setNewFiles(prev => ({ ...prev, [format]: file }));
-            setVisuals(prev => ({ ...prev, [format]: URL.createObjectURL(file) }));
-        }
+        // Create a local URL for the file to show a preview.
+        const newVisuals = { ...visuals, [format]: URL.createObjectURL(file) };
+        setVisuals(newVisuals);
+        setHasChanges(true);
+        toast.success(`Preview for ${format} visual loaded.`);
     };
 
-    const handleSave = async () => {
-        setIsUploading(true);
-        // FIX: Corrected syntax from .visuals to the spread operator ...visuals
-        const updatedVisuals = { ...visuals };
-
-        try {
-            for (const format in newFiles) {
-                const file = newFiles[format];
-                if (file) {
-                    const path = `campaigns/${campaign.id}/${format}-${file.name}`;
-                    const downloadURL = await uploadFile(file, path);
-                    updatedVisuals[format] = downloadURL;
-                    toast.success(`Visual for ${format} uploaded!`);
-                }
-            }
-
-            await toast.promise(
-                onSave({ visuals: updatedVisuals }),
-                {
-                    loading: 'Updating campaign visuals...',
-                    success: 'Campaign visuals updated successfully!',
-                    error: 'Failed to update campaign visuals.',
-                }
-            );
-            setNewFiles({});
-        } catch (error) {
-            console.error("Error saving visuals:", error);
-            toast.error("Failed to save visuals.");
-        } finally {
-            setIsUploading(false);
-        }
+    const handleSaveVisuals = () => {
+        // The onSave function now just updates the parent component's state.
+        // It no longer uploads to Firebase.
+        onSave({ ...campaign, visuals });
+        setHasChanges(false);
+        toast.success("Visual changes saved locally.");
     };
-
-    const hasChanges = Object.keys(newFiles).length > 0;
 
     return (
         <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl mt-6">
-            <h3 className="text-xl font-semibold text-white mb-4">🖼️ Visual Asset Manager</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <h3 className="text-xl font-semibold text-white mb-4">🖼️ Visual Assets (Local Preview)</h3>
+            <div className="space-y-4">
                 {AD_FORMATS.map((format) => (
                     <div key={format}>
-                         <label className="block text-sm font-medium text-gray-300 mb-2">Format {format}</label>
-                        <div className="w-full h-48 bg-gray-900/50 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-700 overflow-hidden relative">
-                            {visuals[format] ? (
-                                <Image
-                                    src={visuals[format]}
-                                    alt={`${format} visual preview`}
-                                    fill
-                                    className="object-contain"
-                                    // FIX: Removed unoptimized={true}. next.config.mjs is set up correctly.
-                                />
-                             ) : (
-                                <span className="text-gray-500 text-sm">No Image</span>
-                            )}
-                         </div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">{format} Visual</label>
                         <input
                             type="file"
                             accept="image/*,video/*"
-                            onChange={(e) => handleFileSelect(format, e)}
-                            className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-yellow-950 hover:file:bg-yellow-300 mt-3 cursor-pointer"
+                            onChange={(e) => handleVisualUpload(format, e)}
+                            className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-gray-950 hover:file:bg-yellow-300"
                         />
+                        {visuals[format] && (
+                            <div className="mt-4 relative w-40 h-40 bg-gray-900 rounded-lg">
+                                <Image
+                                    src={visuals[format]}
+                                    alt={`${format} preview`}
+                                    fill
+                                    className="object-cover rounded-lg"
+                                />
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
-
-            {(hasChanges || isUploading) && (
+            {hasChanges && (
                  <div className="flex justify-end mt-6">
                     <button
-                        onClick={handleSave}
-                        disabled={isUploading}
-                         className="px-5 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        onClick={handleSaveVisuals}
+                        className="px-5 py-2 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors"
                     >
-                        {isUploading ? 'Uploading...' : 'Save Visuals'}
+                      Save Visuals
                     </button>
-                 </div>
+                </div>
             )}
         </div>
     );
 }
+
 
 │   │   ├── icons\
 │   │   │   ├── BatteryIcon.js
@@ -2105,112 +2056,124 @@ Path: C:\Users\shop\global-batteries-dashboard\app\context\AppContext.js
 // app/context/AppContext.js
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, storage } from './firebase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, orderBy } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import toast from 'react-hot-toast';
+import { v4 as uuidv4 } from 'uuid'; // We'll need a library to create unique IDs
+
+// --- Hardcoded Initial Data for Development ---
+// This data will be used to populate the app on first load.
+const initialData = {
+  campaigns: [
+    {
+      id: 'camp-1',
+      name: 'Summer Sale Kickoff',
+      branch: 'National',
+      objective: 'Sales',
+      startDate: '2024-08-01',
+      endDate: '2024-08-15',
+      primaryText: 'Get ready for the hottest deals of the summer!',
+      headlines: ['50% Off Everything!', 'Limited Time Only'],
+      visuals: { "1:1": null, "4:5": null, "9:16": null },
+      targetValue: 50000,
+      budgetId: 'budget-1',
+      status: 'Planning',
+      checklist: { primaryText: true, headlines: true, visuals: false, targeting: true, budget: true },
+    },
+     {
+      id: 'camp-2',
+      name: 'New Branch Opening',
+      branch: 'Alberton',
+      objective: 'Brand Awareness',
+      startDate: '2024-09-01',
+      endDate: '2024-09-30',
+      primaryText: 'Come visit our new Alberton location!',
+      headlines: ['Grand Opening Specials', 'Free Gifts for First 100 Customers'],
+      visuals: { "1:1": null, "4:5": null, "9:16": null },
+      targetValue: 10000,
+      budgetId: 'budget-2',
+      status: 'In Progress',
+      checklist: { primaryText: true, headlines: true, visuals: false, targeting: true, budget: true },
+    }
+  ],
+  tasks: [
+    { id: 'task-1', text: 'Design visuals for Summer Sale', priority: 'High', campaign: 'Summer Sale Kickoff', campaignId: 'camp-1', status: 'To Do' },
+    { id: 'task-2', text: 'Write ad copy for Alberton opening', priority: 'Medium', campaign: 'New Branch Opening', campaignId: 'camp-2', status: 'In Progress' },
+    { id: 'task-3', text: 'Finalize budget allocation', priority: 'High', campaign: 'Summer Sale Kickoff', campaignId: 'camp-1', status: 'Done' },
+  ],
+  notes: [
+    { id: 'note-1', title: 'Q3 Marketing Ideas', content: '- Focus on video content\n- Collaborate with local influencers', color: 'bg-blue-900/80', createdAt: new Date().toISOString() },
+    { id: 'note-2', title: 'Competitor Ad Analysis', content: 'Competitor X is running a big campaign on Facebook. Need to monitor their creatives.', color: 'bg-yellow-900/80', createdAt: new Date().toISOString() },
+  ],
+  budgets: [
+     { id: 'budget-1', name: 'Summer Sale Kickoff', branch: 'National', totalBudget: 25000, dailyBudget: 1666, spent: 0, status: 'Planning', startDate: '2024-08-01' },
+     { id: 'budget-2', name: 'Alberton Grand Opening', branch: 'Alberton', totalBudget: 15000, dailyBudget: 500, spent: 1200, status: 'Live', startDate: '2024-09-01' },
+  ],
+};
+
 
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
-  const [campaigns, setCampaigns] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [notes, setNotes] = useState([]);
-  const [budgets, setBudgets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [campaigns, setCampaigns] = useState(initialData.campaigns);
+  const [tasks, setTasks] = useState(initialData.tasks);
+  const [notes, setNotes] = useState(initialData.notes);
+  const [budgets, setBudgets] = useState(initialData.budgets);
+  
+  // Since we are not fetching data, loading is always false.
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const collectionsToFetch = {
-      campaigns: { setter: setCampaigns, q: query(collection(db, 'campaigns'), orderBy('startDate', 'desc')) },
-      tasks: { setter: setTasks, q: query(collection(db, 'tasks')) },
-      notes: { setter: setNotes, q: query(collection(db, 'notes'), orderBy('createdAt', 'desc')) },
-      budgets: { setter: setBudgets, q: query(collection(db, 'budgets'), orderBy('startDate', 'desc')) },
-    };
-
-    let loadedCount = 0;
-    const totalCollections = Object.keys(collectionsToFetch).length;
-
-    const unsubs = Object.entries(collectionsToFetch).map(([name, { setter, q }]) =>
-      onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setter(data);
-
-        if (loading) {
-            loadedCount++;
-            if (loadedCount === totalCollections) {
-                setLoading(false);
-            }
-        }
-      }, (error) => {
-        console.error(`Error fetching collection '${name}':`, error);
-        toast.error(`Failed to load ${name}. Please try again.`);
-        if (loading) {
-            loadedCount++;
-            if (loadedCount === totalCollections) {
-                setLoading(false);
-            }
-        }
-      })
-    );
-
-    return () => unsubs.forEach(unsub => unsub());
-  }, [loading]);
-
-  const saveData = async (collectionName, data) => {
+  // This function will now update our local state instead of Firestore.
+  const saveData = (collectionName, data) => {
     const dataToSave = { ...data };
-    Object.keys(dataToSave).forEach(key => {
-        if (dataToSave[key] === undefined) {
-            delete dataToSave[key];
-        }
+    const stateUpdater = {
+      campaigns: setCampaigns,
+      tasks: setTasks,
+      notes: setNotes,
+      budgets: setBudgets,
+    }[collectionName];
+
+    if (!stateUpdater) return;
+
+    stateUpdater(prevData => {
+      if (dataToSave.id) {
+        // Update existing item
+        return prevData.map(item => item.id === dataToSave.id ? dataToSave : item);
+      } else {
+        // Add new item with a unique ID
+        dataToSave.id = uuidv4();
+        return [...prevData, dataToSave];
+      }
     });
-
-    try {
-        if (data.id) {
-            const docRef = doc(db, collectionName, data.id);
-            await setDoc(docRef, dataToSave, { merge: true });
-        } else {
-            await addDoc(collection(db, collectionName), dataToSave);
-        }
-    } catch (error) {
-        console.error(`Error saving data to ${collectionName}:`, error);
-        throw new Error(`Failed to save data: ${error.message}`);
-    }
   };
 
-  const deleteData = async (collectionName, id) => {
-    try {
-        await deleteDoc(doc(db, collectionName, id));
-    } catch (error) {
-        console.error(`Error deleting data from ${collectionName}:`, error);
-        throw new Error(`Failed to delete data: ${error.message}`);
-    }
+  // This function will now delete from our local state.
+  const deleteData = (collectionName, id) => {
+    const stateUpdater = {
+      campaigns: setCampaigns,
+      tasks: setTasks,
+      notes: setNotes,
+      budgets: setBudgets,
+    }[collectionName];
+
+    if (!stateUpdater) return;
+
+    stateUpdater(prevData => prevData.filter(item => item.id !== id));
   };
 
-  const uploadFile = async (file, path) => {
-    const storageRef = ref(storage, path);
-    try {
-        await uploadBytes(storageRef, file);
-        const downloadURL = await getDownloadURL(storageRef);
-        return downloadURL;
-    } catch (error) {
-        console.error("Error uploading file:", error);
-        throw new Error("Failed to upload file.");
-    }
-  };
+  // We remove uploadFile as it's a backend-specific function.
+  // Visuals will be handled as local previews.
 
   const value = {
     campaigns,
     tasks,
     notes,
     budgets,
-    setCampaigns,
+    setCampaigns, // Keep setters for import/export functionality
     setTasks,
     setNotes,
     setBudgets,
     loading,
     saveData,
     deleteData,
-    uploadFile,
+    // uploadFile is removed
   };
 
   return (
@@ -2221,37 +2184,106 @@ export function AppProvider({ children }) {
 }
 
 export function useAppContext() {
-  return useContext(AppContext);
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useAppContext must be used within an AppProvider');
+  }
+  return context;
 }
 
-│   │   ├── firebase.js
-
---------------------------------------------------------------------------------
-Path: C:\Users\shop\global-batteries-dashboard\app\context\firebase.js
---------------------------------------------------------------------------------
-// app/context/firebase.js
-import { initializeApp, getApps } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-
-const firebaseConfig = {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
-};
-
-// Initialize Firebase only if it hasn't been already
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const db = getFirestore(app);
-const storage = getStorage(app);
-
-// Export the instances you'll need in other files
-export { app, db, storage };
 
 │   ├── hooks\
+│   │   ├── useAccessibleKanban.js
+
+--------------------------------------------------------------------------------
+Path: C:\Users\shop\global-batteries-dashboard\app\hooks\useAccessibleKanban.js
+--------------------------------------------------------------------------------
+// app/hooks/useAccessibleKanban.js
+"use client";
+import { useState } from 'react';
+import toast from 'react-hot-toast';
+
+export function useAccessibleKanban({ saveData, collectionName, columns }) {
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [keyboardSelectedItem, setKeyboardSelectedItem] = useState(null);
+
+  // Mouse drag-and-drop handlers
+  const handleDragStart = (e, item) => {
+    setDraggedItem(item);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDrop = async (e, newStatus) => {
+    e.preventDefault();
+    if (draggedItem && draggedItem.status !== newStatus) {
+      await updateItemStatus(draggedItem, newStatus);
+    }
+    setDraggedItem(null);
+  };
+
+  // Keyboard interaction handler
+  const handleKeyDown = async (e, item) => {
+    // On Space or Enter, select/deselect the item
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      if (keyboardSelectedItem?.id === item.id) {
+        setKeyboardSelectedItem(null); // Deselect
+        toast.success(`${collectionName.slice(0, -1)} deselected.`);
+      } else {
+        setKeyboardSelectedItem(item); // Select
+        toast.success(`${collectionName.slice(0, -1)} selected. Use arrow keys to move.`);
+      }
+    }
+
+    // On Escape, cancel selection
+    if (e.key === 'Escape' && keyboardSelectedItem) {
+      e.preventDefault();
+      setKeyboardSelectedItem(null);
+      toast.success('Move cancelled.');
+    }
+
+    // On ArrowRight or ArrowLeft, move the selected item
+    if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && keyboardSelectedItem && keyboardSelectedItem.id === item.id) {
+        e.preventDefault();
+        const currentIndex = columns.indexOf(keyboardSelectedItem.status);
+        
+        let newIndex;
+        if (e.key === 'ArrowRight') {
+            newIndex = Math.min(currentIndex + 1, columns.length - 1);
+        } else { // ArrowLeft
+            newIndex = Math.max(currentIndex - 1, 0);
+        }
+
+        if (newIndex !== currentIndex) {
+            const newStatus = columns[newIndex];
+            await updateItemStatus(keyboardSelectedItem, newStatus);
+            // Keep the item selected but update its status for the next move
+            setKeyboardSelectedItem(prev => ({ ...prev, status: newStatus }));
+        }
+    }
+  };
+  
+  // Helper function to save the updated item
+  const updateItemStatus = async (item, newStatus) => {
+    const updatedItem = { ...item, status: newStatus };
+    try {
+      await saveData(collectionName, updatedItem);
+      toast.success(`Status updated to ${newStatus}!`);
+    } catch (error) {
+      console.error(`Error updating ${collectionName} status:`, error);
+      toast.error(`Failed to update status.`);
+    }
+  };
+
+  return { 
+    draggedItem, 
+    keyboardSelectedItem,
+    handleDragStart, 
+    handleDrop, 
+    handleKeyDown 
+  };
+}
+
 │   │   ├── useTasks.js
 
 --------------------------------------------------------------------------------
@@ -2290,6 +2322,7 @@ export function useTasks() {
   return { draggedTask, handleDragStart, handleDrop };
 }
 
+│   ├── lib\
 │   ├── notes\
 │   │   ├── NoteClientView.js
 
@@ -2417,31 +2450,18 @@ export default function NoteClientView() {
 Path: C:\Users\shop\global-batteries-dashboard\app\notes\page.js
 --------------------------------------------------------------------------------
 // app/notes/page.js
-import NoteClientView from './NoteClientView'; // [cite: 421]
-import { getFirestore, collection, getDocs, query, orderBy } from 'firebase/firestore'; // [cite: 422]
-import { db } from '../context/firebase'; // [cite: 422]
-// Corrected import path [cite: 423]
+"use client"; // This page now only renders a client component.
 
-// Server-side function to get initial notes
-async function getNotes() {
-    try {
-        // You might want to add ordering to your notes, which would require an index
-        const notesQuery = query(collection(db, 'notes'), orderBy('createdAt', 'desc')); // Added orderBy
-        const snapshot = await getDocs(notesQuery); // [cite: 424]
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); // [cite: 424]
-    } catch (error) { // [cite: 424]
-        console.error("Failed to fetch notes on server:", error); // [cite: 425]
-        return []; // [cite: 425]
-    }
+import NoteClientView from './NoteClientView';
+
+// This is now a simple component that renders the client view.
+// No data fetching is needed here anymore.
+export default function NotesPage() {
+    // The NoteClientView will get all its data from the AppContext.
+    // We pass an empty array for the initial prop as it is no longer used.
+    return <NoteClientView initialNotes={[]} />;
 }
 
-// Main Server Component for the page
-export default async function NotesPage() {
-    // Fetch initial data on the server
-    const initialNotes = await getNotes(); // [cite: 426]
-    // Pass data to the Client Component
-    return <NoteClientView initialNotes={initialNotes} />; // [cite: 427]
-}
 
 │   ├── tasks\
 │   │   ├── page.js
@@ -2450,44 +2470,18 @@ export default async function NotesPage() {
 Path: C:\Users\shop\global-batteries-dashboard\app\tasks\page.js
 --------------------------------------------------------------------------------
 // app/tasks/page.js
+"use client"; // This page now only renders a client component.
+
 import TaskClientView from './TaskClientView';
-import { getFirestore, collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { db } from '../context/firebase';
 
-// Server-side function to get initial tasks
-async function getTasks() {
-    try {
-        // You might want to add ordering to your tasks as well
-        const snapshot = await getDocs(collection(db, 'tasks'));
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-        console.error("Failed to fetch tasks on server:", error);
-        return [];
-    }
+// This is now a simple component that renders the client view.
+// No data fetching is needed here anymore.
+export default function TasksPage() {
+    // The TaskClientView will get all its data from the AppContext.
+    // We pass empty arrays for initial props as they are no longer used.
+    return <TaskClientView initialTasks={[]} initialCampaigns={[]} />;
 }
 
-// Re-using the getCampaigns function from the other page
-async function getCampaigns() {
-    try {
-        const campaignsQuery = query(collection(db, 'campaigns'), orderBy('startDate', 'desc'));
-        const snapshot = await getDocs(campaignsQuery);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-        console.error("Failed to fetch campaigns on server:", error);
-        return [];
-    }
-}
-
-// Main Server Component for the page
-export default async function TasksPage() {
-    // Fetch initial data on the server in parallel
-    const [initialTasks, initialCampaigns] = await Promise.all([
-        getTasks(),
-        getCampaigns()
-    ]);
-    // Pass data to the Client Component
-    return <TaskClientView initialTasks={initialTasks} initialCampaigns={initialCampaigns} />;
-}
 
 │   │   ├── TaskClientView.js
 
@@ -2501,17 +2495,16 @@ import dynamic from 'next/dynamic';
 import Sidebar from '../components/Sidebar';
 import { useAppContext } from '../context/AppContext';
 import toast from 'react-hot-toast';
-import { useTasks } from '../hooks/useTasks';
+// CHANGE: Import the new accessible hook
+import { useAccessibleKanban } from '../hooks/useAccessibleKanban'; 
 import ConfirmationModal from '../components/ui/ConfirmationModal';
 import SkeletonCard from '../components/ui/SkeletonCard';
 import { Target, Plus, MoreVertical, Edit, Trash2 } from '../components/icons';
 
-// CHANGE: Dynamically import the modal
 const TaskEditorModal = dynamic(() => import('./TaskEditorModal'), {
     loading: () => <p className="text-center p-4">Loading Editor...</p>,
     ssr: false
 });
-
 const statusConfig = {
     "To Do": { colorClass: "bg-gray-500", text: "text-gray-400" },
     "In Progress": { colorClass: "bg-blue-500", text: "text-blue-300" },
@@ -2520,15 +2513,27 @@ const statusConfig = {
 const priorityConfig = { "High": "bg-red-500", "Medium": "bg-yellow-500", "Low": "bg-green-500" };
 const KANBAN_COLUMNS = ["To Do", "In Progress", "Done"];
 
-const TaskCard = ({ task, onEdit, onDelete, onDragStart, isDragging }) => {
+// UPDATE: TaskCard now accepts props for keyboard accessibility
+const TaskCard = ({ task, onEdit, onDelete, onDragStart, onKeyDown, isDragging, isKeyboardSelected }) => {
     const [isMenuOpen, setMenuOpen] = useState(false);
     return (
-        <div draggable onDragStart={onDragStart} className={`bg-gray-800/80 p-4 rounded-lg cursor-grab active:cursor-grabbing transition-opacity ${isDragging ? 'opacity-50' : 'opacity-100'}`}>
+        <div 
+            draggable 
+            onDragStart={onDragStart} 
+            // Add keyboard event handler and tabindex to make it focusable
+            onKeyDown={onKeyDown}
+            tabIndex={0}
+            className={`bg-gray-800/80 p-4 rounded-lg cursor-grab active:cursor-grabbing transition-all ${isDragging ? 'opacity-50' : 'opacity-100'} ${isKeyboardSelected ? 'ring-2 ring-yellow-400 shadow-lg' : 'focus:ring-2 focus:ring-blue-400'}`}
+            // Add ARIA attributes for screen readers
+            role="button"
+            aria-roledescription="Draggable task"
+            aria-grabbed={isKeyboardSelected}
+        >
             <div className="flex justify-between items-start mb-2">
                 <p className="font-semibold text-white pr-4 break-words">{task.text}</p>
                 <div className="relative flex-shrink-0">
                     <button
-                         onClick={() => setMenuOpen(!isMenuOpen)}
+                        onClick={() => setMenuOpen(!isMenuOpen)}
                         onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
                         className="text-gray-500 hover:text-white"
                         aria-expanded={isMenuOpen}
@@ -2562,7 +2567,15 @@ const TaskCard = ({ task, onEdit, onDelete, onDragStart, isDragging }) => {
 
 export default function TaskClientView({ initialCampaigns }) {
     const { tasks, campaigns, loading, saveData, deleteData } = useAppContext();
-    const { draggedTask, handleDragStart, handleDrop } = useTasks();
+    // CHANGE: Use the new accessible hook
+    const { 
+        draggedItem, 
+        keyboardSelectedItem,
+        handleDragStart, 
+        handleDrop, 
+        handleKeyDown 
+    } = useAccessibleKanban({ saveData, collectionName: 'tasks' });
+    
     const [isModalOpen, setModalOpen] = useState(false);
     const [taskToEdit, setTaskToEdit] = useState(null);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
@@ -2604,22 +2617,23 @@ export default function TaskClientView({ initialCampaigns }) {
     };
     
     if (loading) {
+        // Skeleton loading state remains the same...
         return (
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
-                         <div>
+                        <div>
                            <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
                            <div className="h-5 bg-gray-700 rounded w-72 animate-pulse"></div>
                         </div>
                     </header>
                     <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-x-auto">
                         {KANBAN_COLUMNS.map(status => (
-                            <div key={status} className="bg-gray-900/70 rounded-xl flex flex-col min-w-[300px]">
+                             <div key={status} className="bg-gray-900/70 rounded-xl flex flex-col min-w-[300px]">
                                 <div className="p-4 border-b border-gray-800">
                                     <div className="h-6 bg-gray-700 rounded w-1/2 animate-pulse"></div>
-                                </div>
+                                 </div>
                                 <div className="p-4 space-y-4">
                                     <SkeletonCard /><SkeletonCard />
                                 </div>
@@ -2637,10 +2651,10 @@ export default function TaskClientView({ initialCampaigns }) {
                 <Sidebar />
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
-                         <div>
+                        <div>
                             <h2 className="text-3xl font-bold text-white">Tasks Board</h2>
                             <p className="text-gray-400 mt-1">Organize your workflow from &apos;To Do&apos; to &apos;Done&apos;.</p>
-                         </div>
+                        </div>
                         <div className="flex items-center gap-2">
                             <button onClick={handleOpenCreateModal} className="px-5 py-2.5 text-sm font-semibold text-gray-950 bg-yellow-400 rounded-lg shadow-md hover:bg-yellow-300 transition-colors flex items-center justify-center gap-2 whitespace-nowrap" aria-label="Create New Task">
                                 <Plus className="w-5 h-5" />Create Task
@@ -2654,7 +2668,7 @@ export default function TaskClientView({ initialCampaigns }) {
                                 onDragOver={(e) => e.preventDefault()} 
                                 onDrop={(e) => handleDrop(e, status)} 
                                 className="bg-gray-900/70 border-dashed border-2 border-transparent data-[is-over=true]:border-yellow-400/50 rounded-xl flex flex-col min-w-[300px]" 
-                                data-is-over={!!draggedTask && draggedTask.status !== status}
+                                data-is-over={!!draggedItem && draggedItem.status !== status}
                             >
                                 <div className="p-4 border-b border-gray-800 flex-shrink-0">
                                     <h3 className="font-semibold text-white flex items-center gap-2">
@@ -2663,15 +2677,19 @@ export default function TaskClientView({ initialCampaigns }) {
                                         <span className="ml-auto text-sm text-gray-500">{tasks.filter(t => t.status === status).length}</span>
                                     </h3>
                                 </div>
-                                 <div className="p-4 space-y-4 overflow-y-auto flex-1">
+                                <div className="p-4 space-y-4 overflow-y-auto flex-1">
                                     {tasks.filter(t => t.status === status).map(task => (
                                         <TaskCard 
                                             key={task.id} 
                                             task={task} 
                                             onEdit={handleOpenEditModal} 
                                             onDelete={handleDelete} 
-                                            onDragStart={(e) => handleDragStart(e, task)} 
-                                            isDragging={draggedTask?.id === task.id} 
+                                            // Pass mouse and keyboard handlers
+                                            onDragStart={(e) => handleDragStart(e, task)}
+                                            onKeyDown={(e) => handleKeyDown(e, task)}
+                                            // Pass state for visual indicators
+                                            isDragging={draggedItem?.id === task.id}
+                                            isKeyboardSelected={keyboardSelectedItem?.id === task.id}
                                         />
                                     ))}
                                 </div>
@@ -2679,7 +2697,6 @@ export default function TaskClientView({ initialCampaigns }) {
                         ))}
                     </div>
                 </main>
-                {/* Conditionally render the modal only when it's open */}
                 {isModalOpen && (
                     <TaskEditorModal
                         isOpen={isModalOpen}
@@ -2690,7 +2707,7 @@ export default function TaskClientView({ initialCampaigns }) {
                     />
                 )}
                  <ConfirmationModal
-                    isOpen={isConfirmOpen}
+                     isOpen={isConfirmOpen}
                     onClose={() => setConfirmOpen(false)}
                     onConfirm={confirmDelete}
                     message="Are you sure you want to delete this task?"
