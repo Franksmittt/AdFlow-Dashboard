@@ -1,18 +1,17 @@
 // app/budgets/page.js
 import BudgetClientView from './BudgetClientView';
-import { db } from '../context/firebase';
+// CHANGE: Import the new admin database instance for server-side use
+import { adminDb } from '../lib/firebase-admin';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 
-// This is a server-side function to fetch the initial list of budgets.
-// It runs on the server, not in the browser.
+// This server-side function will now use the admin instance
 async function getBudgets() {
     try {
-        const budgetsQuery = query(collection(db, 'budgets'), orderBy('startDate', 'desc'));
+        // CHANGE: Use 'adminDb' instead of the client-side 'db'
+        const budgetsQuery = query(collection(adminDb, 'budgets'), orderBy('startDate', 'desc'));
         const budgetSnapshot = await getDocs(budgetsQuery);
-        // We need to serialize the data to pass it from a Server Component to a Client Component.
         const budgetList = budgetSnapshot.docs.map(doc => ({
             id: doc.id,
-            // FIX: Corrected syntax from .doc.data() to the spread operator ...doc.data()
             ...doc.data()
         }));
         return budgetList;
@@ -22,7 +21,7 @@ async function getBudgets() {
     }
 }
 
-// This is now a React Server Component by default.
+// This is a React Server Component.
 export default async function BudgetsPage() {
     // 1. Data is fetched on the server when the page is requested.
     const initialBudgets = await getBudgets();

@@ -11,7 +11,7 @@ export default function CopyManager({ campaign, onSave }) {
     useEffect(() => {
         setPrimaryText(campaign.primaryText || '');
         setHeadlines(campaign.headlines && campaign.headlines.length > 0 ? campaign.headlines : ['']);
-        setHasChanges(false); // Reset changes when campaign prop changes
+        setHasChanges(false);
     }, [campaign]);
 
     const handlePrimaryTextChange = (e) => {
@@ -32,7 +32,7 @@ export default function CopyManager({ campaign, onSave }) {
     };
 
     const removeHeadline = (index) => {
-        if (headlines.length <= 1) return; // Prevent removing the last one
+        if (headlines.length <= 1) return;
         const newHeadlines = headlines.filter((_, i) => i !== index);
         setHeadlines(newHeadlines);
         setHasChanges(true);
@@ -58,8 +58,6 @@ export default function CopyManager({ campaign, onSave }) {
     return (
         <div className="bg-gray-800/50 border border-gray-800 p-6 rounded-xl mt-6">
             <h3 className="text-xl font-semibold text-white mb-4">📝 Copy & Headlines</h3>
-
-            {/* Primary Text */}
             <div>
                 <label htmlFor="primaryText" className="block text-sm font-medium text-gray-300 mb-1">
                     Primary Text
@@ -72,8 +70,6 @@ export default function CopyManager({ campaign, onSave }) {
                     rows="4"
                 />
             </div>
-
-            {/* Headlines */}
             <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-300 mb-1">Headlines</label>
                 {headlines.map((headline, index) => (
@@ -102,7 +98,6 @@ export default function CopyManager({ campaign, onSave }) {
                     + Add Headline
                 </button>
             </div>
-
             {hasChanges && (
                 <div className="flex justify-end mt-6">
                    <button
