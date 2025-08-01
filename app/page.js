@@ -28,15 +28,22 @@ const StatCard = memo(({ title, value, icon }) => (
 ));
 StatCard.displayName = 'StatCard';
 
-const importedDataSchema = z.object({
-    campaigns: z.array(z.object({ id: z.string().optional(), name: z.string(), status: z.string() })).optional(),
-    tasks: z.array(z.object({ id: z.string().optional(), text: z.string(), status: z.string() })).optional(),
-    notes: z.array(z.object({ id: z.string().optional(), title: z.string() })).optional(),
-    budgets: z.array(z.object({ id: z.string().optional(), name: z.string(), totalBudget: z.number() })).optional(),
-}).strict();
+// FIX: Corrected the position of .strict()
+const importedDataSchema = z.array(z.object({
+  campaignName: z.string().min(1, 'Campaign name is required'),
+  objective: z.string().min(1, 'Objective is required'),
+  branch: z.string().min(1, 'Branch is required'),
+  adFormat: z.string(),
+  creativeNotes: z.string(),
+  visualsDescription: z.array(z.string()),
+  primaryTextOptions: z.array(z.string()),
+  headlineOptions: z.array(z.string()),
+  cta: z.string(),
+  tags: z.array(z.string()).optional(),
+}).strict()); // The .strict() call is now on z.object()
 
 export default function DashboardPage() {
-    const { campaigns, tasks, notes, budgets, setCampaigns, setTasks, setNotes, setBudgets, loading } = useAppContext();
+    const { campaigns, tasks, notes, budgets, saveData, loading } = useAppContext();
     const [dateTime, setDateTime] = useState('');
     const fileInputRef = useRef(null);
     const [isImportConfirmOpen, setImportConfirmOpen] = useState(false);
@@ -64,6 +71,7 @@ export default function DashboardPage() {
     const handleImportFileSelect = (event) => {
         const file = event.target.files[0];
         if (!file) return;
+
         handleExportAll();
         toast.info("Created a backup of your current data just in case.");
         setFileToImport(file);
@@ -73,25 +81,58 @@ export default function DashboardPage() {
 
     const executeImport = () => {
         if (!fileToImport) return;
+
         const fileReader = new FileReader();
         fileReader.readAsText(fileToImport, "UTF-8");
-        fileReader.onload = e => {
+        fileReader.onload = async (e) => {
             try {
                 const importedData = JSON.parse(e.target.result);
                 const result = importedDataSchema.safeParse(importedData);
+
                 if (!result.success) {
                     const errorDetails = result.error.errors.map(err => `${err.path.join('.')} - ${err.message}`).join('; ');
-                    toast.error("Invalid backup file format. Details in console.");
+                    toast.error("Invalid file format. Please check the JSON structure. Details in console.");
                     console.error("Import validation errors:", errorDetails);
                     return;
                 }
-                if (result.data.campaigns) setCampaigns(result.data.campaigns);
-                if (result.data.tasks) setTasks(result.data.tasks);
-                if (result.data.notes) setNotes(result.data.notes);
-                if (result.data.budgets) setBudgets(result.data.budgets);
-                toast.success("Data imported successfully!");
+
+                for (const idea of result.data) {
+                    const newCampaign = {
+                        name: idea.campaignName,
+                        branch: idea.branch,
+                        objective: idea.objective,
+                        status: 'Planning',
+                        startDate: new Date().toISOString().slice(0, 10),
+                        endDate: null,
+                        primaryText: idea.primaryTextOptions[0],
+                        headlines: idea.headlineOptions,
+                        visuals: { "1:1": null, "4:5": null, "9:16": null },
+                        checklist: {
+                            primaryText: false,
+                            headlines: false,
+                            visuals: false,
+                            targeting: false,
+                            budget: false,
+                        },
+                    };
+                    await saveData('campaigns', newCampaign);
+
+                    const newNote = {
+                        title: `Ad Idea: ${idea.campaignName}`,
+                        content: `**Creative Notes:**\n${idea.creativeNotes}\n\n**Visuals Description:**\n- ${idea.visualsDescription.join('\n- ')}\n\n**Primary Text Options:**\n- ${idea.primaryTextOptions.join('\n- ')}\n\n**Headline Options:**\n- ${idea.headlineOptions.join('\n- ')}\n\n**CTA:** ${idea.cta}`,
+                        color: 'bg-indigo-900/80',
+                        createdAt: new Date().toISOString(),
+                        imageUrl: null,
+                        sourceUrl: '',
+                        tags: idea.tags || [],
+                    };
+                    await saveData('notes', newNote);
+                }
+
+                toast.success("AI ad ideas imported successfully!");
+
             } catch (error) {
-                toast.error("Failed to parse backup file.");
+                toast.error("Failed to parse or import file.");
                 console.error("Error parsing imported file:", error);
             }
         };
@@ -105,7 +146,7 @@ export default function DashboardPage() {
                 <Sidebar />
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
-                         <div>
+                        <div>
                             <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
                             <div className="h-5 bg-gray-700 rounded w-64 animate-pulse"></div>
                         </div>
@@ -206,7 +247,7 @@ export default function DashboardPage() {
                 isOpen={isImportConfirmOpen}
                 onClose={() => setImportConfirmOpen(false)}
                 onConfirm={executeImport}
-                message="Importing data will overwrite all existing data. A backup has been automatically created. Are you sure you want to proceed?"
+                message="Importing data will add new entries from the AI ideas file. A backup of your current data has been automatically created. Are you sure you want to proceed?"
             />
         </div>
     );

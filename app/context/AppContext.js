@@ -1,14 +1,12 @@
 // app/context/AppContext.js
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { storage, db } from '../lib/firebase';
+import { db, storage } from '../lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
+import { v4 as uuidv4 } from 'uuid';
 
-
-// --- Hardcoded Initial Data for Development ---
 const initialData = {
   campaigns: [
     {
@@ -64,18 +62,25 @@ const AppContext = createContext();
 
 export function AppProvider({ children }) {
   const isDev = process.env.NODE_ENV === 'development';
-  const [campaigns, setCampaigns] = useState(isDev ? initialData.campaigns : []);
-  const [tasks, setTasks] = useState(isDev ? initialData.tasks : []);
-  const [notes, setNotes] = useState(isDev ? initialData.notes : []);
-  const [budgets, setBudgets] = useState(isDev ? initialData.budgets : []);
+  const [campaigns, setCampaigns] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // In development, use hardcoded data to avoid
+    // hitting Firestore quotas and for faster local development.
     if (isDev) {
+      setCampaigns(initialData.campaigns);
+      setTasks(initialData.tasks);
+      setNotes(initialData.notes);
+      setBudgets(initialData.budgets);
       setLoading(false);
       return;
     }
 
+    // In production, fetch data from Firestore and subscribe to real-time updates
     const unsubscribes = [
       onSnapshot(collection(db, 'campaigns'), (snapshot) => {
         setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -120,7 +125,7 @@ export function AppProvider({ children }) {
   };
 
 
-  // --- New: Upload a file to Firebase Storage and return its download URL ---
+  // Upload a file to Firebase Storage and return its download URL
   const uploadFile = async (file, folder) => {
     setLoading(true);
     try {
