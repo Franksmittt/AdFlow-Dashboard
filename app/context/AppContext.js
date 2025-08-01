@@ -1,12 +1,12 @@
 // app/context/AppContext.js
 "use client";
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-
-// — Firebase Storage imports —
-import { storage } from '../lib/firebase';
+import { storage, db } from '../lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import toast from 'react-hot-toast';
+
 
 // --- Hardcoded Initial Data for Development ---
 const initialData = {
@@ -28,9 +28,9 @@ const initialData = {
     }
   ],
   tasks: [
-    { id: 'task-1', text: 'Design visuals for Summer Sale', campaignName: 'Summer Sale Kickoff', campaignId: 'camp-1', status: 'To Do' },
-    { id: 'task-2', text: 'Write ad copy for Alberton opening', campaignName: 'Alberton Grand Opening', campaignId: 'camp-2', status: 'In Progress' },
-    { id: 'task-3', text: 'Finalize budget allocation', campaignName: 'Summer Sale Kickoff', campaignId: 'camp-1', status: 'Done' },
+    { id: 'task-1', text: 'Design visuals for Summer Sale', campaign: 'Summer Sale Kickoff', campaignId: 'camp-1', status: 'To Do' },
+    { id: 'task-2', text: 'Write ad copy for Alberton opening', campaign: 'Alberton Grand Opening', campaignId: 'camp-2', status: 'In Progress' },
+    { id: 'task-3', text: 'Finalize budget allocation', campaign: 'Summer Sale Kickoff', campaignId: 'camp-1', status: 'Done' },
   ],
   notes: [
     {
@@ -55,57 +55,72 @@ const initialData = {
     },
   ],
   budgets: [
-    { id: 'budget-1', name: 'Summer Sale Kickoff', branch: 'National', amount: 25000, spent: 18500, status: 'Completed', startDate: '2024-08-01' },
-    { id: 'budget-2', name: 'Alberton Grand Opening', branch: 'Alberton', amount: 5000, spent: 4500, status: 'Live', startDate: '2024-09-01' },
+    { id: 'budget-1', name: 'Summer Sale Kickoff', branch: 'National', totalBudget: 25000, spent: 18500, status: 'Completed', startDate: '2024-08-01' },
+    { id: 'budget-2', name: 'Alberton Grand Opening', branch: 'Alberton', totalBudget: 5000, spent: 4500, status: 'Live', startDate: '2024-09-01' },
   ],
 };
 
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
-  const [campaigns, setCampaigns] = useState(initialData.campaigns);
-  const [tasks, setTasks]         = useState(initialData.tasks);
-  const [notes, setNotes]         = useState(initialData.notes);
-  const [budgets, setBudgets]     = useState(initialData.budgets);
-  const [loading, setLoading]     = useState(false);
+  const isDev = process.env.NODE_ENV === 'development';
+  const [campaigns, setCampaigns] = useState(isDev ? initialData.campaigns : []);
+  const [tasks, setTasks] = useState(isDev ? initialData.tasks : []);
+  const [notes, setNotes] = useState(isDev ? initialData.notes : []);
+  const [budgets, setBudgets] = useState(isDev ? initialData.budgets : []);
+  const [loading, setLoading] = useState(true);
 
-  // Save or update an entry in the chosen collection
-  const saveData = (collectionName, data) => {
+  useEffect(() => {
+    if (isDev) {
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribes = [
+      onSnapshot(collection(db, 'campaigns'), (snapshot) => {
+        setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setLoading(false);
+      }),
+      onSnapshot(collection(db, 'tasks'), (snapshot) => {
+        setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setLoading(false);
+      }),
+      onSnapshot(collection(db, 'notes'), (snapshot) => {
+        setNotes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setLoading(false);
+      }),
+      onSnapshot(collection(db, 'budgets'), (snapshot) => {
+        setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setLoading(false);
+      }),
+    ];
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [isDev]);
+
+
+  // Save or update an entry in Firestore
+  const saveData = async (collectionName, data) => {
     const dataToSave = { ...data };
-    const stateUpdater = {
-      campaigns: setCampaigns,
-      tasks:     setTasks,
-      notes:     setNotes,
-      budgets:   setBudgets,
-    }[collectionName];
+    let docRef;
 
-    if (!stateUpdater) return;
-    stateUpdater(prevData => {
-      if (dataToSave.id) {
-        return prevData.map(item =>
-          item.id === dataToSave.id ? dataToSave : item
-        );
-      } else {
-        dataToSave.id = uuidv4();
-        return [...prevData, dataToSave];
-      }
-    });
+    if (dataToSave.id) {
+      docRef = doc(db, collectionName, dataToSave.id);
+    } else {
+      docRef = doc(collection(db, collectionName));
+      dataToSave.id = docRef.id;
+    }
+
+    await setDoc(docRef, dataToSave);
   };
 
-  // Delete an entry by ID from the chosen collection
-  const deleteData = (collectionName, id) => {
-    const stateUpdater = {
-      campaigns: setCampaigns,
-      tasks:     setTasks,
-      notes:     setNotes,
-      budgets:   setBudgets,
-    }[collectionName];
-
-    if (!stateUpdater) return;
-    stateUpdater(prevData => prevData.filter(item => item.id !== id));
+  // Delete an entry by ID from Firestore
+  const deleteData = async (collectionName, id) => {
+    await deleteDoc(doc(db, collectionName, id));
   };
 
-  // — New: Upload a file to Firebase Storage and return its download URL —
+
+  // --- New: Upload a file to Firebase Storage and return its download URL ---
   const uploadFile = async (file, folder) => {
     setLoading(true);
     try {
@@ -131,7 +146,7 @@ export function AppProvider({ children }) {
     loading,
     saveData,
     deleteData,
-    uploadFile,        // ← now exposed
+    uploadFile,
   };
 
   return (
