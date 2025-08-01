@@ -85,7 +85,6 @@ const StatCard = memo(({ title, value, icon }) => (
 ));
 StatCard.displayName = 'StatCard';
 
-// FIX: Corrected the position of .strict()
 const importedDataSchema = z.array(z.object({
   campaignName: z.string().min(1, 'Campaign name is required'),
   objective: z.string().min(1, 'Objective is required'),
@@ -97,7 +96,7 @@ const importedDataSchema = z.array(z.object({
   headlineOptions: z.array(z.string()),
   cta: z.string(),
   tags: z.array(z.string()).optional(),
-}).strict()); // The .strict() call is now on z.object()
+}).strict());
 
 export default function DashboardPage() {
     const { campaigns, tasks, notes, budgets, saveData, loading } = useAppContext();
@@ -129,15 +128,18 @@ export default function DashboardPage() {
         const file = event.target.files[0];
         if (!file) return;
 
-        handleExportAll();
-        toast.info("Created a backup of your current data just in case.");
+        // The file is selected, but we don't do anything else until the user confirms.
         setFileToImport(file);
         setImportConfirmOpen(true);
-        event.target.value = null;
+        event.target.value = null; // Reset the file input
     };
 
     const executeImport = () => {
         if (!fileToImport) return;
+        
+        // Auto-backup current data right before import.
+        handleExportAll();
+        toast.info("Created a backup of your current data before importing.");
 
         const fileReader = new FileReader();
         fileReader.readAsText(fileToImport, "UTF-8");
@@ -2603,7 +2605,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Image from 'next/image';
-import { useAppContext } from '../../context/AppContext'; // Import context
+import { useAppContext } from '../../context/AppContext';
 
 const NOTE_COLORS = ['bg-gray-800', 'bg-red-900/80', 'bg-yellow-900/80', 'bg-green-900/80', 'bg-blue-900/80', 'bg-indigo-900/80', 'bg-purple-900/80', 'bg-pink-900/80'];
 const noteSchema = z.object({
@@ -2651,13 +2653,11 @@ export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit })
 
     if (!isOpen) return null;
 
-    // FIX: Made the onSubmit function async to properly await the save.
     const onSubmit = async (data) => {
         const noteToSave = {
             ...noteToEdit, ...data, id: noteToEdit?.id,
             createdAt: noteToEdit?.createdAt || new Date().toISOString()
         };
-        // The onSave prop is already a promise, so we await it here.
         await onSave(noteToSave);
     };
 
@@ -2811,11 +2811,14 @@ Path: C:\Users\shop\global-batteries-dashboard\app\context\AppContext.js
 // app/context/AppContext.js
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, storage } from '../lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
+// Firebase imports are now commented out.
+// import { db, storage } from '../lib/firebase';
+// import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+// import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
+const LOCAL_STORAGE_KEY = 'adflow-hub-data';
 
 const initialData = {
   campaigns: [
@@ -2871,82 +2874,112 @@ const initialData = {
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
-  const isDev = process.env.NODE_ENV === 'development';
   const [campaigns, setCampaigns] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Load data from local storage on initial render
   useEffect(() => {
-    // In development, use hardcoded data to avoid
-    // hitting Firestore quotas and for faster local development.
-    if (isDev) {
+    try {
+      const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (storedData) {
+        const data = JSON.parse(storedData);
+        setCampaigns(data.campaigns);
+        setTasks(data.tasks);
+        setNotes(data.notes);
+        setBudgets(data.budgets);
+      } else {
+        // Use initial data if no local storage data exists
+        setCampaigns(initialData.campaigns);
+        setTasks(initialData.tasks);
+        setNotes(initialData.notes);
+        setBudgets(initialData.budgets);
+      }
+    } catch (error) {
+      console.error("Failed to load state from local storage", error);
+      // Fallback to initial data if there's an error
       setCampaigns(initialData.campaigns);
       setTasks(initialData.tasks);
       setNotes(initialData.notes);
       setBudgets(initialData.budgets);
-      setLoading(false);
-      return;
-    }
-
-    // In production, fetch data from Firestore and subscribe to real-time updates
-    const unsubscribes = [
-      onSnapshot(collection(db, 'campaigns'), (snapshot) => {
-        setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      }),
-      onSnapshot(collection(db, 'tasks'), (snapshot) => {
-        setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      }),
-      onSnapshot(collection(db, 'notes'), (snapshot) => {
-        setNotes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      }),
-      onSnapshot(collection(db, 'budgets'), (snapshot) => {
-        setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      }),
-    ];
-
-    return () => unsubscribes.forEach(unsub => unsub());
-  }, [isDev]);
-
-
-  // Save or update an entry in Firestore
-  const saveData = async (collectionName, data) => {
-    const dataToSave = { ...data };
-    let docRef;
-
-    if (dataToSave.id) {
-      docRef = doc(db, collectionName, dataToSave.id);
-    } else {
-      docRef = doc(collection(db, collectionName));
-      dataToSave.id = docRef.id;
-    }
-
-    await setDoc(docRef, dataToSave);
-  };
-
-  // Delete an entry by ID from Firestore
-  const deleteData = async (collectionName, id) => {
-    await deleteDoc(doc(db, collectionName, id));
-  };
-
-
-  // Upload a file to Firebase Storage and return its download URL
-  const uploadFile = async (file, folder) => {
-    setLoading(true);
-    try {
-      const timestamp = Date.now();
-      const fileRef = ref(storage, `${folder}/${timestamp}_${file.name}`);
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-      return url;
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Sync data to local storage on every state change
+  useEffect(() => {
+    const allData = { campaigns, tasks, notes, budgets };
+    if (!loading) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(allData));
+    }
+  }, [campaigns, tasks, notes, budgets, loading]);
+
+
+  const saveData = async (collectionName, data) => {
+    const dataToSave = { ...data };
+    
+    // Fallback to local storage for saving
+    let docToSave = dataToSave;
+    if (!docToSave.id) {
+      docToSave = { ...dataToSave, id: uuidv4() };
+    }
+
+    let updatedCollection;
+    let setter;
+
+    if (collectionName === 'campaigns') {
+      updatedCollection = [...campaigns];
+      setter = setCampaigns;
+    } else if (collectionName === 'tasks') {
+      updatedCollection = [...tasks];
+      setter = setTasks;
+    } else if (collectionName === 'notes') {
+      updatedCollection = [...notes];
+      setter = setNotes;
+    } else if (collectionName === 'budgets') {
+      updatedCollection = [...budgets];
+      setter = setBudgets;
+    }
+
+    const index = updatedCollection.findIndex(item => item.id === docToSave.id);
+    if (index > -1) {
+      updatedCollection[index] = docToSave;
+    } else {
+      updatedCollection.push(docToSave);
+    }
+
+    setter(updatedCollection);
+    return docToSave;
+  };
+
+  const deleteData = async (collectionName, id) => {
+    let updatedCollection;
+    let setter;
+
+    if (collectionName === 'campaigns') {
+      updatedCollection = campaigns.filter(item => item.id !== id);
+      setter = setCampaigns;
+    } else if (collectionName === 'tasks') {
+      updatedCollection = tasks.filter(item => item.id !== id);
+      setter = setTasks;
+    } else if (collectionName === 'notes') {
+      updatedCollection = notes.filter(item => item.id !== id);
+      setter = setNotes;
+    } else if (collectionName === 'budgets') {
+      updatedCollection = budgets.filter(item => item.id !== id);
+      setter = setBudgets;
+    }
+
+    setter(updatedCollection);
+  };
+
+  const uploadFile = async (file, folder) => {
+    // With local storage, we can't upload files. Just return a placeholder.
+    toast.error("File upload is not supported in local mode. Please use the live version for this feature.");
+    return `https://via.placeholder.com/300x200?text=${file.name}`;
   };
 
   const value = {
@@ -3174,12 +3207,13 @@ export default function NoteClientView() {
 
     const handleSaveNote = async (savedNote) => {
         try {
+            // The promise is created and awaited here. If `saveData` hangs,
+            // this toast will hang too, which is the behavior you're seeing.
             await toast.promise(saveData('notes', savedNote), {
                 loading: 'Saving note...',
                 success: 'Note saved successfully!',
                 error: 'Failed to save note.',
             });
-            // This is crucial: close the modal only after the save is complete.
             setEditorOpen(false);
         } catch (error) {
             console.error("Error saving note: ", error);
