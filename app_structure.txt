@@ -85,15 +85,22 @@ const StatCard = memo(({ title, value, icon }) => (
 ));
 StatCard.displayName = 'StatCard';
 
-const importedDataSchema = z.object({
-    campaigns: z.array(z.object({ id: z.string().optional(), name: z.string(), status: z.string() })).optional(),
-    tasks: z.array(z.object({ id: z.string().optional(), text: z.string(), status: z.string() })).optional(),
-    notes: z.array(z.object({ id: z.string().optional(), title: z.string() })).optional(),
-    budgets: z.array(z.object({ id: z.string().optional(), name: z.string(), totalBudget: z.number() })).optional(),
-}).strict();
+// FIX: Corrected the position of .strict()
+const importedDataSchema = z.array(z.object({
+  campaignName: z.string().min(1, 'Campaign name is required'),
+  objective: z.string().min(1, 'Objective is required'),
+  branch: z.string().min(1, 'Branch is required'),
+  adFormat: z.string(),
+  creativeNotes: z.string(),
+  visualsDescription: z.array(z.string()),
+  primaryTextOptions: z.array(z.string()),
+  headlineOptions: z.array(z.string()),
+  cta: z.string(),
+  tags: z.array(z.string()).optional(),
+}).strict()); // The .strict() call is now on z.object()
 
 export default function DashboardPage() {
-    const { campaigns, tasks, notes, budgets, setCampaigns, setTasks, setNotes, setBudgets, loading } = useAppContext();
+    const { campaigns, tasks, notes, budgets, saveData, loading } = useAppContext();
     const [dateTime, setDateTime] = useState('');
     const fileInputRef = useRef(null);
     const [isImportConfirmOpen, setImportConfirmOpen] = useState(false);
@@ -121,6 +128,7 @@ export default function DashboardPage() {
     const handleImportFileSelect = (event) => {
         const file = event.target.files[0];
         if (!file) return;
+
         handleExportAll();
         toast.info("Created a backup of your current data just in case.");
         setFileToImport(file);
@@ -130,25 +138,58 @@ export default function DashboardPage() {
 
     const executeImport = () => {
         if (!fileToImport) return;
+
         const fileReader = new FileReader();
         fileReader.readAsText(fileToImport, "UTF-8");
-        fileReader.onload = e => {
+        fileReader.onload = async (e) => {
             try {
                 const importedData = JSON.parse(e.target.result);
                 const result = importedDataSchema.safeParse(importedData);
+
                 if (!result.success) {
                     const errorDetails = result.error.errors.map(err => `${err.path.join('.')} - ${err.message}`).join('; ');
-                    toast.error("Invalid backup file format. Details in console.");
+                    toast.error("Invalid file format. Please check the JSON structure. Details in console.");
                     console.error("Import validation errors:", errorDetails);
                     return;
                 }
-                if (result.data.campaigns) setCampaigns(result.data.campaigns);
-                if (result.data.tasks) setTasks(result.data.tasks);
-                if (result.data.notes) setNotes(result.data.notes);
-                if (result.data.budgets) setBudgets(result.data.budgets);
-                toast.success("Data imported successfully!");
+
+                for (const idea of result.data) {
+                    const newCampaign = {
+                        name: idea.campaignName,
+                        branch: idea.branch,
+                        objective: idea.objective,
+                        status: 'Planning',
+                        startDate: new Date().toISOString().slice(0, 10),
+                        endDate: null,
+                        primaryText: idea.primaryTextOptions[0],
+                        headlines: idea.headlineOptions,
+                        visuals: { "1:1": null, "4:5": null, "9:16": null },
+                        checklist: {
+                            primaryText: false,
+                            headlines: false,
+                            visuals: false,
+                            targeting: false,
+                            budget: false,
+                        },
+                    };
+                    await saveData('campaigns', newCampaign);
+
+                    const newNote = {
+                        title: `Ad Idea: ${idea.campaignName}`,
+                        content: `**Creative Notes:**\n${idea.creativeNotes}\n\n**Visuals Description:**\n- ${idea.visualsDescription.join('\n- ')}\n\n**Primary Text Options:**\n- ${idea.primaryTextOptions.join('\n- ')}\n\n**Headline Options:**\n- ${idea.headlineOptions.join('\n- ')}\n\n**CTA:** ${idea.cta}`,
+                        color: 'bg-indigo-900/80',
+                        createdAt: new Date().toISOString(),
+                        imageUrl: null,
+                        sourceUrl: '',
+                        tags: idea.tags || [],
+                    };
+                    await saveData('notes', newNote);
+                }
+
+                toast.success("AI ad ideas imported successfully!");
+
             } catch (error) {
-                toast.error("Failed to parse backup file.");
+                toast.error("Failed to parse or import file.");
                 console.error("Error parsing imported file:", error);
             }
         };
@@ -162,7 +203,7 @@ export default function DashboardPage() {
                 <Sidebar />
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10">
                     <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
-                         <div>
+                        <div>
                             <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
                             <div className="h-5 bg-gray-700 rounded w-64 animate-pulse"></div>
                         </div>
@@ -263,7 +304,7 @@ export default function DashboardPage() {
                 isOpen={isImportConfirmOpen}
                 onClose={() => setImportConfirmOpen(false)}
                 onConfirm={executeImport}
-                message="Importing data will overwrite all existing data. A backup has been automatically created. Are you sure you want to proceed?"
+                message="Importing data will add new entries from the AI ideas file. A backup of your current data has been automatically created. Are you sure you want to proceed?"
             />
         </div>
     );
@@ -2565,7 +2606,6 @@ import Image from 'next/image';
 import { useAppContext } from '../../context/AppContext'; // Import context
 
 const NOTE_COLORS = ['bg-gray-800', 'bg-red-900/80', 'bg-yellow-900/80', 'bg-green-900/80', 'bg-blue-900/80', 'bg-indigo-900/80', 'bg-purple-900/80', 'bg-pink-900/80'];
-
 const noteSchema = z.object({
     title: z.string().min(1, 'Title is required'),
     content: z.string().min(1, 'Content is required'),
@@ -2576,9 +2616,8 @@ const noteSchema = z.object({
 });
 
 export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit }) {
-    const { uploadFile } = useAppContext(); // Get uploadFile function
+    const { uploadFile } = useAppContext();
     const [isUploading, setIsUploading] = useState(false);
-    
     const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(noteSchema),
         defaultValues: {
@@ -2586,7 +2625,6 @@ export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit })
             imageUrl: null, sourceUrl: '', tags: [],
         }
     });
-
     const [tagInput, setTagInput] = useState('');
     const selectedColor = watch('color');
     const imageUrl = watch('imageUrl');
@@ -2613,11 +2651,14 @@ export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit })
 
     if (!isOpen) return null;
 
-    const onSubmit = (data) => {
+    // FIX: Made the onSubmit function async to properly await the save.
+    const onSubmit = async (data) => {
         const noteToSave = {
             ...noteToEdit, ...data, id: noteToEdit?.id,
+            createdAt: noteToEdit?.createdAt || new Date().toISOString()
         };
-        onSave(noteToSave);
+        // The onSave prop is already a promise, so we await it here.
+        await onSave(noteToSave);
     };
 
     const handleImageUpload = async (e) => {
@@ -2628,7 +2669,6 @@ export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit })
         const toastId = toast.loading("Uploading image...");
 
         try {
-            // Use uploadFile from context
             const downloadURL = await uploadFile(file, 'note-images');
             setValue('imageUrl', downloadURL, { shouldValidate: true });
             toast.success("Image uploaded!", { id: toastId });
@@ -2717,7 +2757,6 @@ export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit })
     );
 };
 
-
 │   │   ├── ui\
 │   │   │   ├── ConfirmationModal.js
 
@@ -2772,14 +2811,12 @@ Path: C:\Users\shop\global-batteries-dashboard\app\context\AppContext.js
 // app/context/AppContext.js
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { storage, db } from '../lib/firebase';
+import { db, storage } from '../lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
+import { v4 as uuidv4 } from 'uuid';
 
-
-// --- Hardcoded Initial Data for Development ---
 const initialData = {
   campaigns: [
     {
@@ -2835,18 +2872,25 @@ const AppContext = createContext();
 
 export function AppProvider({ children }) {
   const isDev = process.env.NODE_ENV === 'development';
-  const [campaigns, setCampaigns] = useState(isDev ? initialData.campaigns : []);
-  const [tasks, setTasks] = useState(isDev ? initialData.tasks : []);
-  const [notes, setNotes] = useState(isDev ? initialData.notes : []);
-  const [budgets, setBudgets] = useState(isDev ? initialData.budgets : []);
+  const [campaigns, setCampaigns] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // In development, use hardcoded data to avoid
+    // hitting Firestore quotas and for faster local development.
     if (isDev) {
+      setCampaigns(initialData.campaigns);
+      setTasks(initialData.tasks);
+      setNotes(initialData.notes);
+      setBudgets(initialData.budgets);
       setLoading(false);
       return;
     }
 
+    // In production, fetch data from Firestore and subscribe to real-time updates
     const unsubscribes = [
       onSnapshot(collection(db, 'campaigns'), (snapshot) => {
         setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -2891,7 +2935,7 @@ export function AppProvider({ children }) {
   };
 
 
-  // --- New: Upload a file to Firebase Storage and return its download URL ---
+  // Upload a file to Firebase Storage and return its download URL
   const uploadFile = async (file, folder) => {
     setLoading(true);
     try {
@@ -3125,8 +3169,6 @@ export default function NoteClientView() {
     const [noteToEdit, setNoteToEdit] = useState(null);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [noteToDelete, setNoteToDelete] = useState(null);
-
-    // --- NEW: State for filtering and searching ---
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTags, setSelectedTags] = useState([]);
 
@@ -3137,6 +3179,7 @@ export default function NoteClientView() {
                 success: 'Note saved successfully!',
                 error: 'Failed to save note.',
             });
+            // This is crucial: close the modal only after the save is complete.
             setEditorOpen(false);
         } catch (error) {
             console.error("Error saving note: ", error);
@@ -3171,7 +3214,6 @@ export default function NoteClientView() {
         }
     };
 
-    // --- NEW: Memoized filtering logic ---
     const allTags = useMemo(() => {
         const tagsSet = new Set(notes.flatMap(note => note.tags || []));
         return Array.from(tagsSet);
@@ -3180,33 +3222,57 @@ export default function NoteClientView() {
     const filteredNotes = useMemo(() => {
         return notes
             .filter(note => {
-                // Search query filter
                 const query = searchQuery.toLowerCase();
                 const inTitle = note.title.toLowerCase().includes(query);
                 const inContent = note.content.toLowerCase().includes(query);
                 const searchMatch = inTitle || inContent;
 
-                // Tags filter
                 const tagsMatch = selectedTags.length === 0 || selectedTags.every(tag => (note.tags || []).includes(tag));
 
                 return searchMatch && tagsMatch;
             })
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by most recent
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }, [notes, searchQuery, selectedTags]);
 
     const handleTagClick = (tag) => {
-        setSelectedTags(prev => 
+        setSelectedTags(prev =>
             prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
         );
     };
 
     if (loading) {
-        // Skeleton loading UI remains the same
         return (
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10">
-                    {/* ... skeleton content ... */}
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
+                        <div>
+                            <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
+                            <div className="h-5 bg-gray-700 rounded w-64 animate-pulse"></div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="h-11 bg-gray-700 rounded-lg w-32 animate-pulse"></div>
+                            <div className="h-11 bg-gray-700 rounded-lg w-32 animate-pulse"></div>
+                        </div>
+                    </header>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl animate-pulse">
+                            <div className="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                            <div className="h-8 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl animate-pulse">
+                            <div className="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                            <div className="h-8 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl animate-pulse">
+                            <div className="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                            <div className="h-8 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl animate-pulse">
+                            <div className="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                            <div className="h-8 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                    </div>
                 </main>
             </div>
         );
@@ -3229,7 +3295,6 @@ export default function NoteClientView() {
                         </div>
                     </header>
 
-                    {/* --- NEW: Filter and Search UI --- */}
                     <div className="flex flex-col md:flex-row gap-4 mb-6 flex-shrink-0">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
@@ -3244,7 +3309,7 @@ export default function NoteClientView() {
                         <div className="flex items-center gap-2 overflow-x-auto pb-2">
                              <span className="text-sm text-gray-400 flex-shrink-0">Filter by Tag:</span>
                              {allTags.map(tag => (
-                                <button 
+                                <button
                                     key={tag}
                                     onClick={() => handleTagClick(tag)}
                                     className={`px-3 py-1 text-xs font-medium rounded-full transition-colors flex-shrink-0 ${selectedTags.includes(tag) ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
@@ -3279,7 +3344,6 @@ export default function NoteClientView() {
         </div>
     );
 }
-
 
 │   │   ├── page.js
 

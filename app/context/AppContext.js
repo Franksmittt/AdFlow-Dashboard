@@ -69,8 +69,6 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In development, use hardcoded data to avoid
-    // hitting Firestore quotas and for faster local development.
     if (isDev) {
       setCampaigns(initialData.campaigns);
       setTasks(initialData.tasks);
@@ -80,7 +78,6 @@ export function AppProvider({ children }) {
       return;
     }
 
-    // In production, fetch data from Firestore and subscribe to real-time updates
     const unsubscribes = [
       onSnapshot(collection(db, 'campaigns'), (snapshot) => {
         setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -104,7 +101,6 @@ export function AppProvider({ children }) {
   }, [isDev]);
 
 
-  // Save or update an entry in Firestore
   const saveData = async (collectionName, data) => {
     const dataToSave = { ...data };
     let docRef;
@@ -119,13 +115,11 @@ export function AppProvider({ children }) {
     await setDoc(docRef, dataToSave);
   };
 
-  // Delete an entry by ID from Firestore
   const deleteData = async (collectionName, id) => {
     await deleteDoc(doc(db, collectionName, id));
   };
 
 
-  // Upload a file to Firebase Storage and return its download URL
   const uploadFile = async (file, folder) => {
     setLoading(true);
     try {

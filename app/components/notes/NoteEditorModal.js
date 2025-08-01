@@ -6,10 +6,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Image from 'next/image';
-import { useAppContext } from '../../context/AppContext'; // Import context
+import { useAppContext } from '../../context/AppContext';
 
 const NOTE_COLORS = ['bg-gray-800', 'bg-red-900/80', 'bg-yellow-900/80', 'bg-green-900/80', 'bg-blue-900/80', 'bg-indigo-900/80', 'bg-purple-900/80', 'bg-pink-900/80'];
-
 const noteSchema = z.object({
     title: z.string().min(1, 'Title is required'),
     content: z.string().min(1, 'Content is required'),
@@ -20,9 +19,8 @@ const noteSchema = z.object({
 });
 
 export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit }) {
-    const { uploadFile } = useAppContext(); // Get uploadFile function
+    const { uploadFile } = useAppContext();
     const [isUploading, setIsUploading] = useState(false);
-    
     const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(noteSchema),
         defaultValues: {
@@ -30,7 +28,6 @@ export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit })
             imageUrl: null, sourceUrl: '', tags: [],
         }
     });
-
     const [tagInput, setTagInput] = useState('');
     const selectedColor = watch('color');
     const imageUrl = watch('imageUrl');
@@ -57,11 +54,12 @@ export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit })
 
     if (!isOpen) return null;
 
-    const onSubmit = (data) => {
+    const onSubmit = async (data) => {
         const noteToSave = {
             ...noteToEdit, ...data, id: noteToEdit?.id,
+            createdAt: noteToEdit?.createdAt || new Date().toISOString()
         };
-        onSave(noteToSave);
+        await onSave(noteToSave);
     };
 
     const handleImageUpload = async (e) => {
@@ -72,7 +70,6 @@ export default function NoteEditorModal({ isOpen, onClose, onSave, noteToEdit })
         const toastId = toast.loading("Uploading image...");
 
         try {
-            // Use uploadFile from context
             const downloadURL = await uploadFile(file, 'note-images');
             setValue('imageUrl', downloadURL, { shouldValidate: true });
             toast.success("Image uploaded!", { id: toastId });

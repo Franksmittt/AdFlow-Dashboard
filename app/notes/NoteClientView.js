@@ -15,13 +15,13 @@ export default function NoteClientView() {
     const [noteToEdit, setNoteToEdit] = useState(null);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [noteToDelete, setNoteToDelete] = useState(null);
-
-    // --- NEW: State for filtering and searching ---
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTags, setSelectedTags] = useState([]);
 
     const handleSaveNote = async (savedNote) => {
         try {
+            // The promise is created and awaited here. If `saveData` hangs,
+            // this toast will hang too, which is the behavior you're seeing.
             await toast.promise(saveData('notes', savedNote), {
                 loading: 'Saving note...',
                 success: 'Note saved successfully!',
@@ -61,7 +61,6 @@ export default function NoteClientView() {
         }
     };
 
-    // --- NEW: Memoized filtering logic ---
     const allTags = useMemo(() => {
         const tagsSet = new Set(notes.flatMap(note => note.tags || []));
         return Array.from(tagsSet);
@@ -70,33 +69,57 @@ export default function NoteClientView() {
     const filteredNotes = useMemo(() => {
         return notes
             .filter(note => {
-                // Search query filter
                 const query = searchQuery.toLowerCase();
                 const inTitle = note.title.toLowerCase().includes(query);
                 const inContent = note.content.toLowerCase().includes(query);
                 const searchMatch = inTitle || inContent;
 
-                // Tags filter
                 const tagsMatch = selectedTags.length === 0 || selectedTags.every(tag => (note.tags || []).includes(tag));
 
                 return searchMatch && tagsMatch;
             })
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by most recent
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }, [notes, searchQuery, selectedTags]);
 
     const handleTagClick = (tag) => {
-        setSelectedTags(prev => 
+        setSelectedTags(prev =>
             prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
         );
     };
 
     if (loading) {
-        // Skeleton loading UI remains the same
         return (
             <div className="flex h-screen bg-gray-950">
                 <Sidebar />
                 <main id="main-content" className="flex-1 p-6 md:p-8 lg:p-10">
-                    {/* ... skeleton content ... */}
+                    <header className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4 flex-shrink-0">
+                        <div>
+                            <div className="h-9 bg-gray-700 rounded w-48 mb-2 animate-pulse"></div>
+                            <div className="h-5 bg-gray-700 rounded w-64 animate-pulse"></div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="h-11 bg-gray-700 rounded-lg w-32 animate-pulse"></div>
+                            <div className="h-11 bg-gray-700 rounded-lg w-32 animate-pulse"></div>
+                        </div>
+                    </header>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl animate-pulse">
+                            <div className="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                            <div className="h-8 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl animate-pulse">
+                            <div className="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                            <div className="h-8 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl animate-pulse">
+                            <div className="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                            <div className="h-8 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                        <div className="bg-gray-800/50 border border-gray-800 p-5 rounded-xl animate-pulse">
+                            <div className="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                            <div className="h-8 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                    </div>
                 </main>
             </div>
         );
@@ -119,7 +142,6 @@ export default function NoteClientView() {
                         </div>
                     </header>
 
-                    {/* --- NEW: Filter and Search UI --- */}
                     <div className="flex flex-col md:flex-row gap-4 mb-6 flex-shrink-0">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
@@ -134,7 +156,7 @@ export default function NoteClientView() {
                         <div className="flex items-center gap-2 overflow-x-auto pb-2">
                              <span className="text-sm text-gray-400 flex-shrink-0">Filter by Tag:</span>
                              {allTags.map(tag => (
-                                <button 
+                                <button
                                     key={tag}
                                     onClick={() => handleTagClick(tag)}
                                     className={`px-3 py-1 text-xs font-medium rounded-full transition-colors flex-shrink-0 ${selectedTags.includes(tag) ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
