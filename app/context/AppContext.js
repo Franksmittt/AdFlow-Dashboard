@@ -1,11 +1,14 @@
 // app/context/AppContext.js
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, storage } from '../lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
+// Firebase imports are now commented out.
+// import { db, storage } from '../lib/firebase';
+// import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+// import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
+const LOCAL_STORAGE_KEY = 'adflow-hub-data';
 
 const initialData = {
   campaigns: [
@@ -61,76 +64,112 @@ const initialData = {
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
-  const isDev = process.env.NODE_ENV === 'development';
   const [campaigns, setCampaigns] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Load data from local storage on initial render
   useEffect(() => {
-    if (isDev) {
+    try {
+      const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (storedData) {
+        const data = JSON.parse(storedData);
+        setCampaigns(data.campaigns);
+        setTasks(data.tasks);
+        setNotes(data.notes);
+        setBudgets(data.budgets);
+      } else {
+        // Use initial data if no local storage data exists
+        setCampaigns(initialData.campaigns);
+        setTasks(initialData.tasks);
+        setNotes(initialData.notes);
+        setBudgets(initialData.budgets);
+      }
+    } catch (error) {
+      console.error("Failed to load state from local storage", error);
+      // Fallback to initial data if there's an error
       setCampaigns(initialData.campaigns);
       setTasks(initialData.tasks);
       setNotes(initialData.notes);
       setBudgets(initialData.budgets);
+    } finally {
       setLoading(false);
-      return;
     }
+  }, []);
 
-    const unsubscribes = [
-      onSnapshot(collection(db, 'campaigns'), (snapshot) => {
-        setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      }),
-      onSnapshot(collection(db, 'tasks'), (snapshot) => {
-        setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      }),
-      onSnapshot(collection(db, 'notes'), (snapshot) => {
-        setNotes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      }),
-      onSnapshot(collection(db, 'budgets'), (snapshot) => {
-        setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      }),
-    ];
-
-    return () => unsubscribes.forEach(unsub => unsub());
-  }, [isDev]);
+  // Sync data to local storage on every state change
+  useEffect(() => {
+    const allData = { campaigns, tasks, notes, budgets };
+    if (!loading) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(allData));
+    }
+  }, [campaigns, tasks, notes, budgets, loading]);
 
 
   const saveData = async (collectionName, data) => {
     const dataToSave = { ...data };
-    let docRef;
-
-    if (dataToSave.id) {
-      docRef = doc(db, collectionName, dataToSave.id);
-    } else {
-      docRef = doc(collection(db, collectionName));
-      dataToSave.id = docRef.id;
+    
+    // Fallback to local storage for saving
+    let docToSave = dataToSave;
+    if (!docToSave.id) {
+      docToSave = { ...dataToSave, id: uuidv4() };
     }
 
-    await setDoc(docRef, dataToSave);
+    let updatedCollection;
+    let setter;
+
+    if (collectionName === 'campaigns') {
+      updatedCollection = [...campaigns];
+      setter = setCampaigns;
+    } else if (collectionName === 'tasks') {
+      updatedCollection = [...tasks];
+      setter = setTasks;
+    } else if (collectionName === 'notes') {
+      updatedCollection = [...notes];
+      setter = setNotes;
+    } else if (collectionName === 'budgets') {
+      updatedCollection = [...budgets];
+      setter = setBudgets;
+    }
+
+    const index = updatedCollection.findIndex(item => item.id === docToSave.id);
+    if (index > -1) {
+      updatedCollection[index] = docToSave;
+    } else {
+      updatedCollection.push(docToSave);
+    }
+
+    setter(updatedCollection);
+    return docToSave;
   };
 
   const deleteData = async (collectionName, id) => {
-    await deleteDoc(doc(db, collectionName, id));
+    let updatedCollection;
+    let setter;
+
+    if (collectionName === 'campaigns') {
+      updatedCollection = campaigns.filter(item => item.id !== id);
+      setter = setCampaigns;
+    } else if (collectionName === 'tasks') {
+      updatedCollection = tasks.filter(item => item.id !== id);
+      setter = setTasks;
+    } else if (collectionName === 'notes') {
+      updatedCollection = notes.filter(item => item.id !== id);
+      setter = setNotes;
+    } else if (collectionName === 'budgets') {
+      updatedCollection = budgets.filter(item => item.id !== id);
+      setter = setBudgets;
+    }
+
+    setter(updatedCollection);
   };
 
-
   const uploadFile = async (file, folder) => {
-    setLoading(true);
-    try {
-      const timestamp = Date.now();
-      const fileRef = ref(storage, `${folder}/${timestamp}_${file.name}`);
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-      return url;
-    } finally {
-      setLoading(false);
-    }
+    // With local storage, we can't upload files. Just return a placeholder.
+    toast.error("File upload is not supported in local mode. Please use the live version for this feature.");
+    return `https://via.placeholder.com/300x200?text=${file.name}`;
   };
 
   const value = {
